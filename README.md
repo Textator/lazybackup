@@ -1,4 +1,4 @@
-# lazybackup
+# lazyBackup
 Backup with DISM batch script.
 
 Filename is created automaticly using computername (needs to be set, lazyBackup will ask for it) and date on automaticly chosen or set drive 

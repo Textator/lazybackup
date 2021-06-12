@@ -63,14 +63,14 @@ REM CONTinue backup with DISM
 REM #####################################################################
 :CONT
 ECHO.
-SET /p conf=Backup with DISM [1mpartition %winpart%:[0m to [1m%storagepath%\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m [95m[Y/N][0m: 
+SET /p conf=Backup with DISM [1mpartition %winpart%:[0m to [1m%storagepath%:\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m [95m[Y/N][0m: 
 FOR %%A in (Y N V) Do if /i '%conf%'=='%%A' goto :conf%%A 
 ECHO.
 ECHO invalid answer, enter Y, N or V
 GOTO CONT
 ECHO.
 ECHO starting Backup with DISM
-ECHO [1m%computername% partition %winpart%: in %storagepath%\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
+ECHO [1m%computername% partition %winpart%: in %storagepath%:\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
 ECHO.
 :confN 
 ECHO.
@@ -78,12 +78,13 @@ ECHO Backup with DISM was canceled
 ECHO.
 GOTO Ende 
 :confY 
-ECHO Backup with DISM: %computername%, Partition %winpart%:, file [1m%%storagepath%\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
-DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"Backup with DISM" /Compress:max
+ECHO * Backup with DISM
+ECHO * computer name: %computername%
+ECHO * partition to backup: %winpart%:
+ECHO * backup to WIM file: [1m%storagepath%:\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
+DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%:\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"Lazybackup" /Compress:max
 
 
 REM /Verify
 :Ende 
 ECHO.
-
-

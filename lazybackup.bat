@@ -14,15 +14,14 @@ set min=%time:~3,2%
 REM set sek=%time:~6,2%
 SETLOCAL ENABLEDELAYEDEXPANSION
 ECHO.
-ECHO +-----------------+
-ECHO + [1mBackup with DISM[0m +
-ECHO +-----------------+
-ECHO.
+ECHO + [35mlazyBackup[0m - Backup with DISM
+ECHO + GPL-3.0 License: https://github.com/Textator/lazybackup[0m
+ECHO. 
 
 REM #####################################################################
 REM read / ask for computername to save with filename
 REM #####################################################################
-ECHO checking for file c.pcname[0m   
+ECHO checking for file [36m.pcname[0m   
 ECHO.
 FOR %%g in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) DO if exist %%g:\.pcname (
 		ECHO found file: [36m%%g:\.pcname[0m
@@ -30,9 +29,7 @@ FOR %%g in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) DO if exist %%g:\.p
 		ECHO read computer name as: [36m%computername%[0m
 	) 
 IF [%computername%]==[] (
-		ECHO.
 		ECHO file [36m.pcname[0m not found or file empty
-		ECHO.
 		SET /P computername=enter [95m[enter computer name][0m: 
 	)
 	
@@ -92,7 +89,6 @@ ECHO.
 :confN 
 ECHO.
 ECHO Backup with DISM was canceled
-ECHO.
 GOTO Ende 
 :confY 
 ECHO Backup with DISM:
@@ -101,5 +97,4 @@ ECHO Partition [36m%winpart%:[0m
 ECHO BACKUP-WIM [36m%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
 DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"LazyBackup with DISM" /Compress:max
 REM /Verify
-:Ende 
-ECHO.
+:Ende

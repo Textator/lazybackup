@@ -1,7 +1,7 @@
 # lazyBackup
 Backup with DISM batch script.
 
-Filename is created automaticly using computername (needs to be set, lazyBackup will ask for it) and date on automaticly chosen or set drive 
+Filename is created automaticly using computername (needs to be set, lazyBackup will ask for it) and date on automaticly chosen or set drive - adding directory on backuop drive called "HDD"
 
 Has to be started from any winPE enviroment if you want to backup system (i.e. windows) partition.
 

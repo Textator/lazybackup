@@ -70,6 +70,9 @@ ECHO invalid answer, enter Y, N or V
 GOTO CONT
 ECHO.
 ECHO starting Backup with DISM
+REM IF NOT EXIST %storagepath%\HDD\ mkdir %storagepath%\HDD
+REM if exist "%storagepath%\HDD" if not exist "%storagepath%\HDD\" (echo "it's a file") else (echo "it's a dir")
+if exist %storagepath%\HDD\NUL echo "%storagepath%\HDD\ already exists"
 ECHO [1m%computername% partition %winpart%: in %storagepath%:\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
 ECHO.
 :confN 

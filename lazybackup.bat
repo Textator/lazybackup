@@ -95,6 +95,6 @@ ECHO Backup with DISM:
 ECHO Computer [36m%computername%[0m
 ECHO Partition [36m%winpart%:[0m
 ECHO BACKUP-WIM [36m%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
-DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"LazyBackup with DISM" /Compress:max
+DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"LazyBackup with DISM" /Compress:max
 REM /Verify
-:Ende
+:Ende 

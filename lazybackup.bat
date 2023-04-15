@@ -1,7 +1,8 @@
-REM lazyBackup
+REM lazyBackup v0.5
 REM GPL-3.0 License: https://github.com/Textator/lazybackup
 REM
 @ECHO off
+TITLE lazyBackup - v0.5
 REM #####################################################################
 REM set date format to save with filename
 REM #####################################################################
@@ -24,9 +25,9 @@ REM #####################################################################
 ECHO checking for file [36m.pcname[0m   
 ECHO.
 FOR %%g in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) DO if exist %%g:\.pcname (
-		ECHO found file: [36m%%g:\.pcname[0m
+		ECHO + found file: [36m%%g:\.pcname[0m
 		SET /p computername=<%%g:\.pcname
-		ECHO read computer name as: [36m%computername%[0m
+		ECHO + read computer name as: [36m%computername%[0m - might not be correctly displayed in WinRE
 	) 
 IF [%computername%]==[] (
 		ECHO file [36m.pcname[0m not found or file empty
@@ -74,9 +75,9 @@ REM #####################################################################
 :CONT
 ECHO.
 SET /p conf=Backup with DISM partition [36m%winpart%:[0m to [36m%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m [95m[Y/N][0m: 
-FOR %%A in (Y N V) Do if /i '%conf%'=='%%A' goto :conf%%A 
+FOR %%A in (Y N) Do if /i '%conf%'=='%%A' goto :conf%%A 
 ECHO.
-ECHO invalid answer, enter Y, N or V
+ECHO invalid answer, enter Y or N
 GOTO CONT
 ECHO.
 ECHO starting Backup with DISM
@@ -89,12 +90,16 @@ ECHO.
 :confN 
 ECHO.
 ECHO Backup with DISM was canceled
-GOTO Ende 
+GOTO EndLB 
 :confY 
 ECHO Backup with DISM:
 ECHO Computer [36m%computername%[0m
 ECHO Partition [36m%winpart%:[0m
 ECHO BACKUP-WIM [36m%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim[0m
-DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"LazyBackup with DISM" /Compress:max
-REM /Verify
-:Ende 
+DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"LazyBackup with DISM" 
+ECHO DISM /capture-image /capturedir:%winpart%:\ /ImageFile:%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.wim /name:%computername%_%YYYY%%MM%%DD%_%hr%%min% /Description:"LazyBackup with DISM" /LogPath:%storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.log /Compress:max /Verify
+ECHO log saved to %storagepath%:\WIM\%computername%_%YYYY%%MM%%DD%_%hr%%min%.log
+:EndLB
+echo [35mlazyBackup[0m will end now and exit CMD-window to abort press ctrl+c
+timeout /T 60
+exit

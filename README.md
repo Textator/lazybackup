@@ -17,6 +17,7 @@ lazyBackup looks for certain files:
 - .DRIVETORESTORE - pu in root of drive which should be restored
 
 from the help section inside the script:
+
 lazyBackup will use DISM to backup one drive on another drive automatically 
 if certain files are found on certain drives. 
 It's possible to use a network drive for backup or enter arguments manually
@@ -32,6 +33,6 @@ Place (empty) files .BACKUPSTORE / .USBBACKUPSTORE in root of any drive to
 store the backup. A drive containing .USBBACKUPSTORE in its root has priority
 over drives with .BACKUPSTORE. So a local drive is not used for backup if a
 (USB) drive is present. Drives are searched from A-Z drive letter.
-* Only first found files are used. *
+* Only first found files are used.
 
 coming next: autostart from WinPE partition. just need to fix some things.

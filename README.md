@@ -1,5 +1,5 @@
 # lazyBackup
-Backup & restore with DISM batch script.
+Backup & restore as a DISM batch script.
 
 Fast Windows partition backup and restore using Microsoft's built-in DISM imaging tool.
 

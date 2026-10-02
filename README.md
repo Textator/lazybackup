@@ -26,6 +26,66 @@ lazyBackup is a portable batch script designed to run from WinPE. It uses marker
 
 For Windows system partition backups and restores, running from WinPE is strongly recommended.
 
+## Running lazyBackup
+
+lazyBackup is designed to run from WinPE and works best when Windows is offline.
+
+### Option 1: Windows Recovery Environment (WinRE)
+
+You can reboot directly into Windows Recovery Environment from Windows:
+
+1. Hold **Shift** while clicking **Restart**
+2. Select **Troubleshoot**
+3. Select **Advanced Options**
+4. Select **Command Prompt**
+
+A command prompt will open in the recovery environment. Navigate to the location of `lazyBackup.cmd` and start it:
+
+```cmd
+lazyBackup.cmd
+```
+
+### Option 2: Windows Installation Media
+
+Any Windows setup USB stick or Windows installation ISO can be used.
+
+1. Boot from the USB stick or ISO
+2. Wait until the Windows Setup screen appears
+3. Press:
+
+```text
+Shift + F10
+```
+
+This opens a command prompt running in Windows PE.
+
+From there, navigate to the drive containing `lazyBackup.cmd` and start it:
+
+```cmd
+lazyBackup.cmd
+```
+
+### Why WinPE?
+
+Running lazyBackup from WinPE keeps the Windows partition offline during backup and restore operations.
+
+Benefits:
+
+- No files are in use
+- No VSS required
+- Safer restore operations
+- Consistent Windows partition images
+
+## Future Plans
+
+Planned features include:
+
+- Custom WinPE image containing lazyBackup
+- Automatic startup from WinPE
+- Windows Boot Manager integration
+- Scheduled offline backups
+- Unattended backup and restore workflows
+
 ## Marker Files
 
 lazyBackup can automatically detect required drives and settings using marker files.

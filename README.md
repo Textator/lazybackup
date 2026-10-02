@@ -1,5 +1,5 @@
 # lazyBackup
-Windows Backup & Restore as a DISM batch script. For servicing a Windows Partiton from WinPE.
+Windows Backup & Restore a Windows Partiton from WinPE with a DISM batch script.
 
 Fast Windows partition backup and restore using Microsoft's built-in DISM imaging tool.
 

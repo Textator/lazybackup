@@ -32,6 +32,6 @@ Place (empty) files .BACKUPSTORE / .USBBACKUPSTORE in root of any drive to
 store the backup. A drive containing .USBBACKUPSTORE in its root has priority
 over drives with .BACKUPSTORE. So a local drive is not used for backup if a
 (USB) drive is present. Drives are searched from A-Z drive letter.
-%MAGENTA% * %RESET%Only first found files are used.
+* Only first found files are used. *
 
 coming next: autostart from WinPE partition. just need to fix some things.

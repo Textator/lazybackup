@@ -1,8 +1,6 @@
 # lazyBackup
 Backup & restore with DISM batch script.
 
-# lazyBackup
-
 Fast Windows partition backup and restore using Microsoft's built-in DISM imaging tool.
 
 lazyBackup is a portable batch script designed to run from WinPE. It uses marker files and simple configuration options to automate Windows partition backups and restores without requiring additional software.

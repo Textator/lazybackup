@@ -7,21 +7,14 @@ REM https://github.com/Textator/lazyBackup
 REM ==================================================
 
 REM script version
-set "script_version=0.7"
-title lazyBackup v%script_version%
+set "SCRIPT_VERSION=0.8.1"
+
+title lazyBackup v%SCRIPT_VERSION%
+cls
 
 REM **************************************************
 REM Configuration BEGIN - modify from here
 REM **************************************************
-
-REM Backup directory below BACKUPSTORE/USBBACKUPSTORE
-REM Backup directory below BACKUPSTORE/USBBACKUPSTORE
-REM Empty = ask user
-REM Examples:
-REM set "WIM_SUBDIR=WIM"
-REM set "WIM_SUBDIR=Images"
-REM set "WIM_SUBDIR=Backups\Windows"
-set "WIM_SUBDIR="
 
 REM Store backups in WIM_SUBDIR\COMPUTER_NAME\
 REM Y = use COMPUTER_NAME subfolder
@@ -43,14 +36,17 @@ REM [B] Backup Windows Partition
 REM [R] Restore Windows Partition - !!! careful !!!
 REM [E] Exit
 
-REM set "POST_BACKUP_ACTION=n"
+REM set "POST_OPERATION_ACTION=n"
 REM R = Reboot
 REM N = No action
 REM S = Shutdown
-set "POST_BACKUP_ACTION="
+set "POST_OPERATION_ACTION="
 
-REM set "MAP_NETWORK=N" N skips network anything else, including empty, does not 
+REM set "MAP_NETWORK=N"
+REM N = skip all network prompts
+REM any other value (including empty) enables network configuration
 set "MAP_NETWORK="
+
 set "DRIVE_LETTER=Z:"
 set "NETWORK_PATH="
 set "NETWORK_USERNAME="
@@ -60,20 +56,42 @@ REM **************************************************
 REM Configuration END - don't modify below
 REM **************************************************
 
+REM ==================================================
+REM Administrator Rights Check
+REM ==================================================
+
+net session >nul 2>&1
+
+if errorlevel 1 (
+    echo.
+    echo ==========================================
+    echo ERROR
+    echo ==========================================
+    echo.
+    echo Administrator privileges are required.
+    echo.
+    echo Please run lazyBackup from an elevated
+    echo command prompt or from WinPE.
+    echo.
+    pause
+    goto EXITONLY
+)
+
 REM runtime variables
 set "COMPUTER_NAME="
 set "WINDOWS_PARTITION="
-set "STORAGE_PATH="
+set "DETECTED_STORAGE_PATH="
+set "ACTIVE_STORAGE_PATH="
 set "BACKUP_ROOT="
 set "BACKUP_IMAGE_DIR="
 set "BACKUP_IMAGE_FILE="
 set "RESTORE_IMAGE_FILE="
 set "RESTORE_PARTITION="
-set "COUNT="
+set "IMAGE_COUNT="
 set "FORMAT_PARTITION="
 
 REM ==================================================
-REM Colours etc. configuration
+REM Console Colours
 REM ==================================================
 
 for /F %%a in ('echo prompt $E^| cmd') do set "ESC=%%a"
@@ -117,19 +135,19 @@ if /I "%DATE_LOCALE%"=="ISO" (
     set DD=%date:~8,2%
 )
 
-set hr=%time:~0,2%
-if "%hr:~0,1%"==" " set hr=0%hr:~1,1%
-set min=%time:~3,2%
+set HOUR=%time:~0,2%
+if "%HOUR:~0,1%"==" " set HOUR=0%HOUR:~1,1%
+set MINUTE=%time:~3,2%
 
-set "TIMESTAMP=%YYYY%%MM%%DD%_%hr%%min%"
+set "TIMESTAMP=%YYYY%%MM%%DD%_%HOUR%%MINUTE%"
 REM ----------------------------------------------------
 REM end Date Configuration
 REM ----------------------------------------------------
 
-:STARTING
+:INITIALIZE
 echo.
 echo ==================================================
-echo   * %BOLD%%MAGENTA%lazyBackup%RESET% v%script_version%
+echo   * %BOLD%%MAGENTA%lazyBackup%RESET% v%SCRIPT_VERSION%
 echo   Fast Windows Image Backup using DISM
 echo ==================================================
 echo. Project: https://github.com/Textator/lazyBackup
@@ -144,24 +162,30 @@ goto MAINMENU
 
 :MAINMENU
 echo.
+echo ==========================================
+echo              Main Menu
+echo ==========================================
+echo.
 echo [B] Backup Windows Partition
 echo [R] Restore Windows Partition
 echo [E] Exit
 echo.
+set /P OPERATION_MODE=Selection [B/R/E]:
 
-set /p OPERATION_MODE=Selection [b / r / e]:
-
-if "%OPERATION_MODE%"=="b" goto BACKUP_INIT
-if "%OPERATION_MODE%"=="r" goto RESTORE_INIT
-if "%OPERATION_MODE%"=="e" goto EXITONLY
+if /I "%OPERATION_MODE%"=="b" goto DETECT_BACKUP_SOURCE_INIT
+if /I "%OPERATION_MODE%"=="r" goto DETECT_RESTORE_SOURCE_INIT
+if /I "%OPERATION_MODE%"=="e" goto EXITONLY
 
 echo.
 echo Invalid selection.
 goto MAINMENU
 
-:BACKUP_INIT
-::Computer Name Detection
+:DETECT_BACKUP_SOURCE_INIT
 set "OPERATION_MODE=BACKUP"
+set "DETECTED_STORAGE_PATH="
+set "ACTIVE_STORAGE_PATH="
+
+::Computer Name Detection
 echo Searching for file %CYAN%.pcname%RESET%...
 echo.
 
@@ -178,11 +202,11 @@ for %%g in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
 if not defined COMPUTER_NAME (
     echo.
     echo No valid %CYAN%.pcname%RESET% file found.
-    set /P COMPUTER_NAME=Enter computer name:
+    set /P COMPUTER_NAME=Enter computer name [computer name]:
 )
 
 ::Backup Source Detection
-:BACKUP
+:DETECT_BACKUP_SOURCE
 set "WINDOWS_PARTITION="
 
 for %%i in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
@@ -199,7 +223,7 @@ for %%i in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
 if not defined WINDOWS_PARTITION (
     echo.
     echo No .DRIVETOBACKUP marker file found.
-    set /P WINDOWS_PARTITION=Enter drive letter to back up:
+    set /P WINDOWS_PARTITION=Enter drive letter to back up [drive letter]:
 )
 
 ::Network Initialization
@@ -210,7 +234,7 @@ wpeinit >nul 2>&1
 ::Network Mapping Menu
 :PROMPT_NETWORK
 
-if /I "%MAP_NETWORK%"=="N" goto STORAGE
+if /I "%MAP_NETWORK%"=="N" goto DETECT_WIM_STORAGE
 
 echo.
 echo ==========================================
@@ -218,11 +242,11 @@ echo      Network Storage Configuration
 echo ==========================================
 echo.
 
-set /p "choice=Map a network storage location for WIM storage? [Y/N]: "
+set /p "NETWORK_CHOICE=Map network storage for WIM files? [Y/N]: "
 
-if /I "%choice%"=="Y" goto MAPDRIVE
-if /I "%choice%"=="J" goto MAPDRIVE
-if /I "%choice%"=="N" goto STORAGE
+if /I "%NETWORK_CHOICE%"=="Y" goto MAP_NETWORK_DRIVE
+if /I "%NETWORK_CHOICE%"=="J" goto MAP_NETWORK_DRIVE
+if /I "%NETWORK_CHOICE%"=="N" goto DETECT_WIM_STORAGE
 
 echo.
 echo %RED%Invalid selection.%RESET%
@@ -232,12 +256,12 @@ timeout /t 2 >nul
 goto PROMPT_NETWORK
 
 ::Map Network Drive
-:MAPDRIVE
+:MAP_NETWORK_DRIVE
 
 :: Ask for missing network settings
 
 if not defined DRIVE_LETTER (
-set /P DRIVE_LETTER=Enter drive letter :
+set /P DRIVE_LETTER=Enter drive letter [drive letter]:
 )
 
 if not "%DRIVE_LETTER:~-1%"==":" (
@@ -252,7 +276,7 @@ if not defined NETWORK_PATH (
 
 if not defined NETWORK_USERNAME (
     echo.
-    set /P NETWORK_USERNAME=Enter network username :
+    set /P NETWORK_USERNAME=Enter network username [DOMAIN\USER or USER]:
 )
 
 echo.
@@ -278,19 +302,19 @@ if errorlevel 1 (
 
 echo.
 
-:STORAGE
-::Backup Storage Detection
-::.USBBACKUPSTORE has priority over .BACKUPSTORE so local wimdir ist not used if USB-storage is present
+::WIM Storage Detection
+:DETECT_WIM_STORAGE
+::.USBBACKUPSTORE has priority over .BACKUPSTORE so local wimdir is not used if USB-storage is present
 if not defined STORAGE_PATH (
 for %%k in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
-    if not defined STORAGE_PATH (
-    if exist %%k:\.USBBACKUPSTORE (
-        set "STORAGE_PATH=%%k"
+    if not defined STORAGE_PATH if not defined DETECTED_STORAGE_PATH (
+      if exist %%k:\.USBBACKUPSTORE (
+        set "DETECTED_STORAGE_PATH=%%k"
         echo.
-        echo Found USB backup storage:
-        echo %CYAN%!STORAGE_PATH!:\.USBBACKUPSTORE%RESET%
+        echo Found USB backup storage via marker file .USBBACKUPSTORE:
+        echo %CYAN%!DETECTED_STORAGE_PATH!:\.USBBACKUPSTORE%RESET%
         echo Backup destination:
-		echo %CYAN%!STORAGE_PATH!:\WIM%RESET%
+		echo %CYAN%!DETECTED_STORAGE_PATH!:\WIM%RESET%
      )
     )
 )
@@ -298,38 +322,52 @@ for %%k in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
 
 if not defined STORAGE_PATH (
 for %%n in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
-    if not defined STORAGE_PATH (
+     if not defined STORAGE_PATH if not defined DETECTED_STORAGE_PATH (
     if exist %%n:\.BACKUPSTORE (
-        set "STORAGE_PATH=%%n"
+        set "DETECTED_STORAGE_PATH=%%n"
         echo.
-        echo Backup storage:
-        echo %CYAN%!STORAGE_PATH!:\.BACKUPSTORE%RESET%
+        echo Found backup storage via marker file .BACKUPSTORE:
+        echo %CYAN%!DETECTED_STORAGE_PATH!:\.BACKUPSTORE%RESET%
         echo Backup destination:
-        echo %CYAN%!STORAGE_PATH!:\WIM%RESET%
+        echo %CYAN%!DETECTED_STORAGE_PATH!:\WIM%RESET%
     )
    )
-)
+ )
 )
 
-if not defined STORAGE_PATH goto ASK_STORAGE
-goto STORAGE_OK
+if not defined STORAGE_PATH if not defined DETECTED_STORAGE_PATH goto ASK_STORAGE
+goto BUILD_STORAGE_PATHS
 
 :ASK_STORAGE
 echo.
 echo No backup storage marker file found (.BACKUPSTORE or .USBBACKUPSTORE).
-set /P STORAGE_PATH=Enter backup path (without trailing backslash)
+set /P DETECTED_STORAGE_PATH=Enter backup path (without trailing backslash)
 
 if not defined WIM_SUBDIR (
     echo.
-    set /P WIM_SUBDIR=Backup subfolder in storage root [default "WIM\"]:
+    set /P WIM_SUBDIR=Backup subfolder in storage root [FOLDER or ENTER for (default) "WIM\"\]:
 )
 
-:STORAGE_OK
-REM support UNC-path in path
-if "!STORAGE_PATH:~0,2!"=="\\" (
-    set "BACKUP_ROOT=!STORAGE_PATH!\%WIM_SUBDIR%"
+
+:BUILD_STORAGE_PATHS
+
+if not defined WIM_SUBDIR set "WIM_SUBDIR=WIM"
+
+if defined STORAGE_PATH (
+    set "ACTIVE_STORAGE_PATH=%STORAGE_PATH%"
+    echo.
+    echo Using configured storage location:
+    echo %CYAN%!ACTIVE_STORAGE_PATH!%RESET%
+    echo.
 ) else (
-    set "BACKUP_ROOT=!STORAGE_PATH!:\%WIM_SUBDIR%"
+    set "ACTIVE_STORAGE_PATH=%DETECTED_STORAGE_PATH%"
+)
+
+REM support UNC-path in path
+if "!ACTIVE_STORAGE_PATH:~0,2!"=="\\" (
+    set "BACKUP_ROOT=!ACTIVE_STORAGE_PATH!\%WIM_SUBDIR%"
+) else (
+    set "BACKUP_ROOT=!ACTIVE_STORAGE_PATH!:\%WIM_SUBDIR%"
 )
 
 REM Build image filename
@@ -342,29 +380,34 @@ if /I "%USE_COMPUTER_NAME_SUBFOLDER%"=="Y" (
 )
 
 if /I "%OPERATION_MODE%"=="RESTORE" goto RESTORE_SELECT_IMAGE
-if /I "%OPERATION_MODE%"=="BACKUP" goto ASK_POST_ACTION
+if /I "%OPERATION_MODE%"=="BACKUP" goto CONFIGURE_POST_OPERATION_ACTION
 
-:ASK_POST_ACTION
+:CONFIGURE_POST_OPERATION_ACTION
 
-if not defined POST_BACKUP_ACTION (
-	echo.
-	echo What to do after exiting lazyBackup?
-	echo.
-	set /P POST_BACKUP_ACTION= R = Reboot / S = Shutdown / N = Nothing? [R/S/N]:
+if not defined POST_OPERATION_ACTION (
+    echo.
+    echo ==========================================
+    echo     Select action after completion:
+    echo ==========================================
+    echo.
+    echo [R] Reboot
+    echo [S] Shutdown
+    echo [N] Nothing
+    echo.
+    set /P POST_OPERATION_ACTION=Selection [R/S/N]:
 )
 
-if /I "%POST_BACKUP_ACTION%"=="R" goto BACKUP_SUMMARY
-if /I "%POST_BACKUP_ACTION%"=="S" goto BACKUP_SUMMARY
-if /I "%POST_BACKUP_ACTION%"=="N" goto BACKUP_SUMMARY
+if /I "%POST_OPERATION_ACTION%"=="R" goto BACKUP_SUMMARY
+if /I "%POST_OPERATION_ACTION%"=="S" goto BACKUP_SUMMARY
+if /I "%POST_OPERATION_ACTION%"=="N" goto BACKUP_SUMMARY
 
 echo.
 echo %RED%Invalid selection.%RESET%
 echo Please enter R, S or N.
-set "POST_BACKUP_ACTION="
-goto ASK_POST_ACTION
+set "POST_OPERATION_ACTION="
+goto CONFIGURE_POST_OPERATION_ACTION
 
 :BACKUP_SUMMARY
-::Backup Summary
 echo.
 echo ==========================================
 echo               Backup Summary
@@ -372,27 +415,28 @@ echo ==========================================
 echo.
 echo Computer Name : %CYAN%%COMPUTER_NAME%%RESET%
 echo Source Drive  : %CYAN%%WINDOWS_PARTITION%:%RESET%
-echo Destination   : %CYAN%%BACKUP_IMAGE_FILE%%RESET%
+echo Storage       : %CYAN%!ACTIVE_STORAGE_PATH!%RESET%
+echo WIM-file      : %CYAN%%BACKUP_IMAGE_FILE%%RESET%
 echo.
 
-set /P conf=Start backup? [Y/N]:
+set /P BACKUP_CONFIRM=Start backup? [Y/N]:
 
-if /I "%conf%"=="Y" goto BACKUP_SUMMARY
-if /I "%conf%"=="N" goto CANCEL_BACKUP
+if /I "%BACKUP_CONFIRM%"=="Y" goto EXECUTE_BACKUP
+if /I "%BACKUP_CONFIRM%"=="N" goto CANCEL_BACKUP
 
 echo.
 echo %RED%Invalid selection.%RESET%
 echo Please enter Y or N.
 
 timeout /t 2 >nul
-goto EXECUTE_BACKUP
+goto BACKUP_SUMMARY
 
 ::Cancel Backup
 :CANCEL_BACKUP
 
 echo.
 echo %YELLOW%Backup canceled by user.%RESET%
-goto ExitOnly
+goto EXITONLY
 
 ::Start Backup
 :EXECUTE_BACKUP
@@ -402,7 +446,7 @@ if not exist "%BACKUP_ROOT%" (
 
 	if errorlevel 1 (
 		echo %RED%ERROR%RESET% Failed to create backup directory.
-		goto ExitOnly
+		goto EXITONLY
 	)
 )
 
@@ -418,7 +462,7 @@ dir "%BACKUP_ROOT%" >nul 2>&1
 if errorlevel 1 (
     echo.
     echo %RED%ERROR%RESET% Backup destination is not accessible.
-    goto ExitOnly
+    goto EXITONLY
 )
 
 echo.
@@ -440,18 +484,26 @@ DISM ^
 echo.
 if errorlevel 1 (
 echo %RED%Backup failed.%RESET%
-Goto ExitOnly
+Goto EXITONLY
 )
 
+echo.
+echo ==========================================
+echo                SUCCESS
+echo ==========================================
+echo.
 echo %GREEN%Backup completed successfully.%RESET%
 echo.
+echo Image:    %BACKUP_IMAGE_FILE%
 echo Log file: %BACKUP_IMAGE_FILE:.wim=.log%
 echo.
 
 goto EndLB
 
-:RESTORE_INIT
+:DETECT_RESTORE_SOURCE_INIT
 set "COMPUTER_NAME="
+set "DETECTED_STORAGE_PATH="
+set "ACTIVE_STORAGE_PATH="
 
 for %%g in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
     if not defined COMPUTER_NAME (
@@ -482,31 +534,37 @@ goto PROMPT_NETWORK
 
 :RESTORE_SELECT_IMAGE
 REM WIM selection menu
-set COUNT=0
+set IMAGE_COUNT=0
+
+echo.
+echo ==========================================
+echo            Available Images
+echo ==========================================
+echo.
 
 if /I "%USE_COMPUTER_NAME_SUBFOLDER%"=="Y" (
 	for /R "%BACKUP_ROOT%" %%F in (*.wim) do (
-		set /a COUNT+=1
-		set FILE!COUNT!=%%~fF
-		echo !COUNT!^) %%~nxF
+		set /a IMAGE_COUNT+=1
+		set FILE!IMAGE_COUNT!=%%~fF
+		echo !IMAGE_COUNT!^) %%~nxF
 	)
 ) else ( 
 	for %%F in ("%BACKUP_ROOT%\*.wim") do (
-		set /a COUNT+=1
-		set FILE!COUNT!=%%~fF
-		echo !COUNT!^) %%~nxF
+		set /a IMAGE_COUNT+=1
+		set FILE!IMAGE_COUNT!=%%~fF
+		echo !IMAGE_COUNT!^) %%~nxF
 	)
 )
 
 ::Handle no images found
-if %COUNT% EQU 0 (
+if %IMAGE_COUNT% EQU 0 (
 echo.
-echo No backup images found.
+echo No WIM backup images found in %BACKUP_ROOT%.
 goto MAINMENU
 )
 
 REM Handle one image
-if %COUNT% EQU 1 (
+if %IMAGE_COUNT% EQU 1 (
     set "RESTORE_IMAGE_FILE=!FILE1!"
 
     echo.
@@ -517,8 +575,9 @@ if %COUNT% EQU 1 (
 )
 
 REM Handle multiple images
+:: image list
 echo.
-set /p SELECTION=Select image:
+set /P SELECTION=Image number:
 
 set "RESTORE_IMAGE_FILE=!FILE%SELECTION%!"
 
@@ -549,9 +608,9 @@ if defined COMPUTER_NAME (
         echo This may be a backup from a different computer.
         echo.
         
-        set /P OTHERPC=Continue anyway? [Y/N\]:
+        set /P DIFFERENT_PC_IMAGE_CONFIRM=Continue anyway? [Y/N]:
 
-        if /I not "%OTHERPC%"=="Y" goto RESTORE_SELECT_IMAGE
+        if /I not "%DIFFERENT_PC_IMAGE_CONFIRM%"=="Y" goto RESTORE_SELECT_IMAGE
     )
 )
 
@@ -561,12 +620,38 @@ echo ==========================================
 echo              Restore Summary
 echo ==========================================
 echo.
-echo Image File   : %RESTORE_IMAGE_FILE%
-echo Target Drive : %RESTORE_PARTITION%:
+echo Computer Name : %CYAN%%COMPUTER_NAME%%RESET%
+echo WIM-file      : %CYAN%%RESTORE_IMAGE_FILE%%RESET%
+echo Storage       : %CYAN%!ACTIVE_STORAGE_PATH!%RESET%
+echo Target Drive  : %CYAN%%RESTORE_PARTITION%:%RESET%
 echo.
 
-:ASK_FORMAT
+:ASK_POST_ACTION_RESTORE
 
+if not defined POST_OPERATION_ACTION (
+    echo ==========================================
+    echo    Select action after completion:
+    echo ==========================================
+    echo.
+    echo [R] Reboot
+    echo [S] Shutdown
+    echo [N] Nothing
+    echo.
+    set /P POST_OPERATION_ACTION=Selection [R/S/N]:
+)
+
+if /I "%POST_OPERATION_ACTION%"=="R" goto ASK_FORMAT
+if /I "%POST_OPERATION_ACTION%"=="S" goto ASK_FORMAT
+if /I "%POST_OPERATION_ACTION%"=="N" goto ASK_FORMAT
+
+echo.
+echo %RED%Invalid selection.%RESET%
+echo Please enter R, S or N.
+
+set "POST_OPERATION_ACTION="
+goto ASK_POST_ACTION_RESTORE
+
+:ASK_FORMAT
 echo.
 echo ==========================================
 echo Target Partition Format
@@ -577,33 +662,31 @@ echo restoring a Windows image to an empty disk.
 echo Formatting is NECESSARY before restoring to
 echo an EXISTING Windows PARTITION!
 echo.
-echo WARNING:
-echo ! POSSIBLE DATA LOSS ! :: make it very colorful and bold and blinkiung warning!
-echo Formatting will erase all existing files
-echo on %RESTORE_PARTITION%:
-echo.
 
 set /p FORMAT_PARTITION=Format target partition before restore? [Y/N\]:
 
 if /I "%FORMAT_PARTITION%"=="Y" goto FORMAT_TARGET
-if /I "%FORMAT_PARTITION%"=="N" goto RESTORE_START
+if /I "%FORMAT_PARTITION%"=="N" goto EXECUTE_RESTORE
 
 echo Invalid selection.
 goto ASK_FORMAT
 
 :FORMAT_TARGET
-
 echo.
-echo Formatting %RESTORE_PARTITION%: as NTFS...
+echo ==========================================
+echo                %RED%WARNING!%RESET%
+echo           ! POSSIBLE DATA LOSS !
 echo.
+echo                Target: %RESTORE_PARTITION%:
+echo ==========================================
 echo.
-echo WARNING!
-echo This will format %RESTORE_PARTITION%:
+echo The target partition %RESTORE_PARTITION%: will be formatted.
 echo.
-
-set /P FORMATCONFIRM=Type "FORMAT" to continue:
-
-if /I not "%FORMATCONFIRM%"=="FORMAT" goto ASK_FORMAT
+echo %RED%All existing files and folders will be deleted.%RESET%
+echo %RED%This action cannot be undone.%RESET%
+echo.
+set /P FORMATCONFIRM=Enter FORMAT in uppercase letters to confirm formatting:
+if not "%FORMATCONFIRM%"=="FORMAT" goto ASK_FORMAT
 
 REM /Y intentionally omitted
 format %RESTORE_PARTITION%: /FS:NTFS /Q
@@ -611,21 +694,28 @@ format %RESTORE_PARTITION%: /FS:NTFS /Q
 if errorlevel 1 (
 echo.
 echo Format failed.
-goto ExitOnly
+goto EXITONLY
 )
 
 echo.
 echo Format completed successfully.
 echo.
 
-goto RESTORE_START
+goto EXECUTE_RESTORE
 
 
-:RESTORE_START
+:EXECUTE_RESTORE
 REM Confirmation
-echo WARNING!
 echo.
-echo All data on %RESTORE_PARTITION%: will be overwritten.
+echo ==========================================
+echo                 WARNING
+echo ==========================================
+echo.
+echo The image will be restored to:
+echo %RESTORE_PARTITION%:
+echo.
+echo Existing data WILL be overwritten if files
+echo already exist on the target partition.
 echo.
 
 REM just to confirm that there is probably no data to be overwritten.
@@ -650,17 +740,23 @@ DISM ^
 if errorlevel 1 (
 echo.
 echo Restore failed.
-goto ExitOnly
+goto EXITONLY
 )
 ::Restore success
 echo.
-echo Restore completed successfully.
+echo ==========================================
+echo                SUCCESS
+echo ==========================================
+echo.
+echo %GREEN%Restore completed successfully.%RESET%
+echo.
 goto EndLB
 
 :SHOWHELP
 echo.
 echo lazyBackup Help:
 echo ----------------
+echo Version: %SCRIPT_VERSION%
 echo.
 echo %MAGENTA%lazyBackup%RESET% will use DISM to backup one drive on another drive automatically 
 echo if certain files are found on certain drives. 
@@ -678,28 +774,31 @@ echo Place (empty) files .BACKUPSTORE / .USBBACKUPSTORE in root of any drive to
 echo store the backup. A drive containing .USBBACKUPSTORE in its root has priority
 echo over drives with .BACKUPSTORE. So a local drive is not used for backup if a
 echo (USB) drive is present. Drives are searched from A-Z drive letter.
+echo Alternatively, STORAGE_PATH can be configured
+echo directly inside the script for unattended use.
+echo.
 echo %MAGENTA% * %RESET%Only first found files are used.%MAGENTA% *%RESET%
 Goto END_NOTHING
 
 ::Exit EndlazyBackup
 :EndLB
-if /I "%POST_BACKUP_ACTION%"=="R" goto POST_BACKUP_ACTION_R
-if /I "%POST_BACKUP_ACTION%"=="S" goto POST_BACKUP_ACTION_S
-if /I "%POST_BACKUP_ACTION%"=="N" goto ExitOnly
+if /I "%POST_OPERATION_ACTION%"=="R" goto POST_OPERATION_ACTION_R
+if /I "%POST_OPERATION_ACTION%"=="S" goto POST_OPERATION_ACTION_S
+if /I "%POST_OPERATION_ACTION%"=="N" goto EXITONLY
 
-:POST_BACKUP_ACTION_R
+:POST_OPERATION_ACTION_R
 	echo %MAGENTA%lazyBackup%RESET% will exit in 120 seconds.
 	echo System will %RED%reboot%RESET%...
 	echo Press CTRL+C to cancel the countdown.
 	timeout /t 120
 	wpeutil reboot
-:POST_BACKUP_ACTION_S
+:POST_OPERATION_ACTION_S
 	echo %MAGENTA%lazyBackup%RESET% will exit in 120 seconds.
 	echo System will %RED%shut down%RESET%...
 	echo Press CTRL+C to cancel the countdown.
 	timeout /t 120
 	wpeutil shutdown
-:ExitOnly
+:EXITONLY
 	echo %MAGENTA%lazyBackup%RESET% will exit in 120 seconds.
 	echo No reboot or shutdown scheduled...
 	echo Press CTRL+C to cancel the countdown.

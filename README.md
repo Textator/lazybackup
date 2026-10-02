@@ -1,5 +1,6 @@
 # lazyBackup
-Backup with DISM batch script.
+Backup & restore with DISM batch script.
+
 
 Filename is created automaticly using computername (needs to be set, lazyBackup will ask for it) and date on automaticly chosen or set drive - adding directory on backup drive called "WIM"
 
@@ -13,3 +14,24 @@ lazyBackup looks for certain files:
 - .DRIVETOBACKUP - put in root of drive to be backup, if not found lazyBackup asks for the drive letter to be backed up
 - .BACKUPSTORE - put in root of drive to store the backup, if not found asks for the drive letter of drive to store the backup
 - .USBBACKUPSTORE - put in root of any external drive (e.g. USB) to store the backup, if found it's prefered to drive with .BACKUPSTORE
+- .DRIVETORESTORE - pu in root of drive which should be restored
+
+from the help section inside the script:
+lazyBackup will use DISM to backup one drive on another drive automatically 
+if certain files are found on certain drives. 
+It's possible to use a network drive for backup or enter arguments manually
+if files are not found.
+
+Place a file called .pcname containing the desired computer name as text in
+the root of any drive for automatic computer name detection.
+
+Place (empty) file .DRIVETOBACKUP in root of a drive to be backed up.
+Backups will be saved in subfolder "WIM".
+
+Place (empty) files .BACKUPSTORE / .USBBACKUPSTORE in root of any drive to
+store the backup. A drive containing .USBBACKUPSTORE in its root has priority
+over drives with .BACKUPSTORE. So a local drive is not used for backup if a
+(USB) drive is present. Drives are searched from A-Z drive letter.
+%MAGENTA% * %RESET%Only first found files are used.
+
+coming next: autostart from WinPE partition. just need to fix some things.

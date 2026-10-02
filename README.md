@@ -1,20 +1,250 @@
 # lazyBackup
 Backup & restore with DISM batch script.
 
-Filename is created automaticly using computername (needs to be set, lazyBackup will ask for it) and date on automaticly chosen or set drive - adding directory on backup drive called "WIM"
+# lazyBackup
 
-Has to be started from any winPE enviroment if you want to backup system (i.e. windows) partition.
+Fast Windows partition backup and restore using Microsoft's built-in DISM imaging tool.
 
-A script, because I was to lazy to do regular backups of a whole partition with DISM. Lots of other backup programs didn't work for me, because they either had to be installed or can't restore a working partition on different hatrdware or different sized partition.
+lazyBackup is a portable batch script designed to run from WinPE. It uses marker files and simple configuration options to automate Windows partition backups and restores without requiring additional software.
 
-DISM, included in windows, can do that! The regular Windows setup basically copies a WIM-Image produced by DISM to a selected partiton.
+## Features
 
-lazyBackup looks for certain files:
-- .DRIVETOBACKUP - put in root of drive to be backup, if not found lazyBackup asks for the drive letter to be backed up
-- .BACKUPSTORE - put in root of drive to store the backup, if not found asks for the drive letter of drive to store the backup
-- .USBBACKUPSTORE - put in root of any external drive (e.g. USB) to store the backup, if found it's prefered to drive with .BACKUPSTORE
-- .DRIVETORESTORE - pu in root of drive which should be restored
+- Backup Windows partitions to WIM images using DISM
+- Restore WIM images to a target partition
+- Automatic detection using marker files
+- Support for local disks, USB storage and network shares
+- Optional unattended operation through script configuration
+- Computer name based image naming
+- Optional computer-specific subdirectories
+- Automatic shutdown or reboot after completion
+- Designed for WinPE environments
+- No installation required
 
+## Requirements
+
+- Windows PE (recommended)
+- Administrator privileges
+- DISM available in the environment
+
+For Windows system partition backups and restores, running from WinPE is strongly recommended.
+
+## Marker Files
+
+lazyBackup can automatically detect required drives and settings using marker files.
+
+### `.pcname`
+
+Contains the desired computer name.
+
+Example:
+
+```text
+OFFICE-PC
+```
+
+### `.DRIVETOBACKUP`
+
+Place this file in the root of the Windows partition to be backed up.
+
+Example:
+
+```text
+C:\.DRIVETOBACKUP
+```
+
+### `.DRIVETORESTORE`
+
+Place this file in the root of the target partition for restore operations.
+
+Example:
+
+```text
+D:\.DRIVETORESTORE
+```
+
+### `.BACKUPSTORE`
+
+Marks a drive as a backup storage location.
+
+Example:
+
+```text
+E:\.BACKUPSTORE
+```
+
+### `.USBBACKUPSTORE`
+
+Marks an external drive as a backup storage location.
+
+Example:
+
+```text
+F:\.USBBACKUPSTORE
+```
+
+`.USBBACKUPSTORE` has priority over `.BACKUPSTORE`.
+
+## Storage Detection
+
+lazyBackup selects storage in the following order:
+
+1. Configured `STORAGE_PATH`
+2. Drive containing `.USBBACKUPSTORE`
+3. Drive containing `.BACKUPSTORE`
+4. Manual user input
+
+## Configuration
+
+The following variables can be configured directly in the script.
+
+### Backup Location
+
+```batch
+set "WIM_SUBDIR=WIM"
+```
+
+Examples:
+
+```batch
+set "WIM_SUBDIR=Images"
+set "WIM_SUBDIR=Backups\Windows"
+```
+
+### Computer Name Subfolder
+
+```batch
+set "USE_COMPUTER_NAME_SUBFOLDER=Y"
+```
+
+Result:
+
+```text
+WIM\OFFICE-PC\OFFICE-PC_20261001_1200.wim
+```
+
+### Operation Mode
+
+```batch
+set "OPERATION_MODE=B"
+```
+
+Available values:
+
+```text
+B = Backup
+R = Restore
+E = Exit
+```
+
+### Post Operation Action
+
+```batch
+set "POST_OPERATION_ACTION=S"
+```
+
+Available values:
+
+```text
+R = Reboot
+S = Shutdown
+N = Nothing
+```
+
+### Network Configuration
+
+Skip all network prompts:
+
+```batch
+set "MAP_NETWORK=N"
+```
+
+Any other value (including empty) enables network configuration.
+
+### Fixed Storage Location
+
+Example:
+
+```batch
+set "STORAGE_PATH=\\SERVER\Backups"
+```
+
+This bypasses marker-based storage detection and is useful for unattended operation.
+
+## Backup Image Naming
+
+Images are automatically named using:
+
+```text
+COMPUTERNAME_YYYYMMDD_HHMM.wim
+```
+
+Example:
+
+```text
+OFFICE-PC_20261001_2130.wim
+```
+
+## Network Shares
+
+lazyBackup can store backups on network shares.
+
+Example:
+
+```text
+\\SERVER\Backups
+```
+
+The script can map a network drive and then save or restore WIM images from that location.
+
+## Typical Backup Workflow
+
+1. Boot into WinPE
+2. Start lazyBackup
+3. Detect computer name
+4. Detect source partition
+5. Detect backup storage
+6. Create WIM image
+7. Reboot, shut down or exit
+
+## Typical Restore Workflow
+
+1. Boot into WinPE
+2. Start lazyBackup
+3. Select restore image
+4. Select restore target
+5. Optional partition format
+6. Apply image using DISM
+7. Reboot, shut down or exit
+
+## Safety Features
+
+- Confirmation before backup
+- Confirmation before restore
+- Additional confirmation before formatting
+- Computer name verification during restore
+- Restore image selection menu
+- Optional format step before restore
+
+## Example Unattended Backup
+
+```batch
+set "OPERATION_MODE=B"
+set "POST_OPERATION_ACTION=S"
+set "MAP_NETWORK=N"
+set "STORAGE_PATH=\\SERVER\Backups"
+```
+
+This performs an unattended backup and shuts down the system afterwards.
+
+## Version
+
+Current release:
+
+**v0.8.1**
+
+## License
+
+GPL-3.0
 ## Version 0.8.1
 
 ### Changes
@@ -32,24 +262,3 @@ lazyBackup looks for certain files:
 - Added computer-name verification before restore
 - Improved configuration and help text
 - Refactored code structure and variable naming
-
-from the help section inside the script:
-
-lazyBackup will use DISM to backup one drive on another drive automatically 
-if certain files are found on certain drives. 
-It's possible to use a network drive for backup or enter arguments manually
-if files are not found.
-
-Place a file called .pcname containing the desired computer name as text in
-the root of any drive for automatic computer name detection.
-
-Place (empty) file .DRIVETOBACKUP in root of a drive to be backed up.
-Backups will be saved in subfolder "WIM".
-
-Place (empty) files .BACKUPSTORE / .USBBACKUPSTORE in root of any drive to
-store the backup. A drive containing .USBBACKUPSTORE in its root has priority
-over drives with .BACKUPSTORE. So a local drive is not used for backup if a
-(USB) drive is present. Drives are searched from A-Z drive letter.
-* Only first found files are used.
-
-coming next: autostart from WinPE partition. just need to fix some things.

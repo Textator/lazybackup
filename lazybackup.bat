@@ -21,9 +21,9 @@ REM S = Shutdown
 
 set "MAP_NETWORK="
 REM set "MAP_NETWORK=N" N skips network anything else, including empty, does not 
-set "DRIVE_LETTER=Z:"
-set "NETWORK_PATH=\\192.168.170.9\v$\wim"
-set "NETWORK_USERNAME=rz\Administrator"
+set "DRIVE_LETTER="
+set "NETWORK_PATH="
+set "NETWORK_USERNAME="
 set "PASSWORD="
 
 REM Configuration END - don't modify below

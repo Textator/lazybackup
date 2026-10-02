@@ -1,7 +1,6 @@
 # lazyBackup
 Backup & restore with DISM batch script.
 
-
 Filename is created automaticly using computername (needs to be set, lazyBackup will ask for it) and date on automaticly chosen or set drive - adding directory on backup drive called "WIM"
 
 Has to be started from any winPE enviroment if you want to backup system (i.e. windows) partition.
@@ -15,6 +14,24 @@ lazyBackup looks for certain files:
 - .BACKUPSTORE - put in root of drive to store the backup, if not found asks for the drive letter of drive to store the backup
 - .USBBACKUPSTORE - put in root of any external drive (e.g. USB) to store the backup, if found it's prefered to drive with .BACKUPSTORE
 - .DRIVETORESTORE - pu in root of drive which should be restored
+
+## Version 0.8.1
+
+### Changes
+
+- Improved Backup and Restore workflow
+- Added configurable `STORAGE_PATH` for unattended operation
+- Added automatic storage detection using:
+  - `.BACKUPSTORE`
+  - `.USBBACKUPSTORE`
+- Added runtime storage handling:
+  - `DETECTED_STORAGE_PATH`
+  - `ACTIVE_STORAGE_PATH`
+- Improved Backup and Restore summaries
+- Improved restore safety checks
+- Added computer-name verification before restore
+- Improved configuration and help text
+- Refactored code structure and variable naming
 
 from the help section inside the script:
 

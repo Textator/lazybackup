@@ -7,7 +7,7 @@ REM https://github.com/Textator/lazyBackup
 REM ==================================================
 
 REM script version
-set "SCRIPT_VERSION=0.8.1"
+set "SCRIPT_VERSION=0.8.2"
 
 title lazyBackup v%SCRIPT_VERSION%
 cls
@@ -45,12 +45,18 @@ set "POST_OPERATION_ACTION="
 REM set "MAP_NETWORK=N"
 REM N = skip all network prompts
 REM any other value (including empty) enables network configuration
-set "MAP_NETWORK="
+set "MAP_NETWORK=n"
 
 set "DRIVE_LETTER=Z:"
-set "NETWORK_PATH="
-set "NETWORK_USERNAME="
-set "PASSWORD="
+set "NETWORK_PATH=\\server\share"
+set "NETWORK_USERNAME=domain\user"
+set "PASSWORD=xxx"
+
+REM DISM scratch directory
+REM Empty = automatic selection
+set "DISM_SCRATCH="
+
+
 
 REM **************************************************
 REM Configuration END - don't modify below
@@ -82,6 +88,9 @@ set "COMPUTER_NAME="
 set "WINDOWS_PARTITION="
 set "DETECTED_STORAGE_PATH="
 set "ACTIVE_STORAGE_PATH="
+set "DISM_SCRATCH_PATH="
+set "SCRATCH_CREATED="
+set "STORAGE_IS_NETWORK="
 set "BACKUP_ROOT="
 set "BACKUP_IMAGE_DIR="
 set "BACKUP_IMAGE_FILE="
@@ -184,6 +193,7 @@ goto MAINMENU
 set "OPERATION_MODE=BACKUP"
 set "DETECTED_STORAGE_PATH="
 set "ACTIVE_STORAGE_PATH="
+set "SCRATCH_CREATED="
 
 ::Computer Name Detection
 echo Searching for file %CYAN%.pcname%RESET%...
@@ -363,6 +373,84 @@ if defined STORAGE_PATH (
     set "ACTIVE_STORAGE_PATH=%DETECTED_STORAGE_PATH%"
 )
 
+REM ==================================================
+REM Determine DISM Scratch Directory
+REM ==================================================
+
+if defined DISM_SCRATCH (
+    set "DISM_SCRATCH_PATH=%DISM_SCRATCH%"
+    goto SCRATCH_READY
+)
+REM preset to "N"
+set "STORAGE_IS_NETWORK=N"
+
+REM UNC path?
+if "!ACTIVE_STORAGE_PATH:~0,2!"=="\\" (
+    set "STORAGE_IS_NETWORK=Y"
+)
+
+REM mapped network drive?
+if /I "!STORAGE_IS_NETWORK!"=="N" (
+    net use | find /I "!ACTIVE_STORAGE_PATH!:" >nul
+
+    if not errorlevel 1 (
+        set "STORAGE_IS_NETWORK=Y"
+    )
+)
+
+REM --------------------------------------------------
+REM Local storage -> use storage volume
+REM --------------------------------------------------
+
+if /I "!STORAGE_IS_NETWORK!"=="N" (
+
+    set "DISM_SCRATCH_PATH=!ACTIVE_STORAGE_PATH!:\lazyBackupTemp"
+
+) else (
+
+REM --------------------------------------------------
+REM Network storage -> find local drive
+REM --------------------------------------------------
+
+    for %%D in (
+        C D E F G H I J K L M N O P Q R S T U V W Y Z
+    ) do (
+
+        if exist %%D:\ (
+
+            if /I not "%%D"=="X" (
+
+                if /I not "%%D"=="!WINDOWS_PARTITION!" (
+
+                    if not defined DISM_SCRATCH_PATH (
+                        set "DISM_SCRATCH_PATH=%%D:\lazyBackupTemp"
+                    )
+
+                )
+
+            )
+
+        )
+
+    )
+
+)
+
+REM last fallback
+if not defined DISM_SCRATCH_PATH (
+    set "DISM_SCRATCH_PATH=X:\Temp"
+)
+
+:SCRATCH_READY
+
+if not exist "!DISM_SCRATCH_PATH!" (
+    mkdir "!DISM_SCRATCH_PATH!" 2>nul
+
+    if exist "!DISM_SCRATCH_PATH!" (
+        set "SCRATCH_CREATED=Y"
+    )
+)
+
 REM support UNC-path in path
 if "!ACTIVE_STORAGE_PATH:~0,2!"=="\\" (
     set "BACKUP_ROOT=!ACTIVE_STORAGE_PATH!\%WIM_SUBDIR%"
@@ -416,6 +504,7 @@ echo.
 echo Computer Name : %CYAN%%COMPUTER_NAME%%RESET%
 echo Source Drive  : %CYAN%%WINDOWS_PARTITION%:%RESET%
 echo Storage       : %CYAN%!ACTIVE_STORAGE_PATH!%RESET%
+echo Scratch Dir   : !DISM_SCRATCH_PATH!
 echo WIM-file      : %CYAN%%BACKUP_IMAGE_FILE%%RESET%
 echo.
 
@@ -476,10 +565,11 @@ DISM ^
  /capturedir:%WINDOWS_PARTITION%:\ ^
  /ImageFile:"%BACKUP_IMAGE_FILE%" ^
  /name:%COMPUTER_NAME%_%TIMESTAMP% ^
- /Description:"lazyBackup with DISM" ^
+ /Description:"%COMPUTER_NAME%_%TIMESTAMP% partition %WINDOWS_PARTITION% lazyBackup v%SCRIPT_VERSION%" ^
  /LogPath:"%BACKUP_IMAGE_FILE:.wim=.log%" ^
  /Compress:max ^
- /Verify
+ /Verify ^
+ /ScratchDir:"%DISM_SCRATCH_PATH%"
 
 echo.
 if errorlevel 1 (
@@ -498,12 +588,17 @@ echo Image:    %BACKUP_IMAGE_FILE%
 echo Log file: %BACKUP_IMAGE_FILE:.wim=.log%
 echo.
 
+if defined SCRATCH_CREATED (
+    rd /s /q "%DISM_SCRATCH_PATH%" 2>nul
+)
+
 goto EndLB
 
 :DETECT_RESTORE_SOURCE_INIT
 set "COMPUTER_NAME="
 set "DETECTED_STORAGE_PATH="
 set "ACTIVE_STORAGE_PATH="
+set "SCRATCH_CREATED="
 
 for %%g in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
     if not defined COMPUTER_NAME (
@@ -623,6 +718,7 @@ echo.
 echo Computer Name : %CYAN%%COMPUTER_NAME%%RESET%
 echo WIM-file      : %CYAN%%RESTORE_IMAGE_FILE%%RESET%
 echo Storage       : %CYAN%!ACTIVE_STORAGE_PATH!%RESET%
+echo Scratch Dir   : !DISM_SCRATCH_PATH!
 echo Target Drive  : %CYAN%%RESTORE_PARTITION%:%RESET%
 echo.
 
@@ -735,7 +831,8 @@ DISM ^
  /ImageFile:"%RESTORE_IMAGE_FILE%" ^
  /Index:1 ^
  /ApplyDir:%RESTORE_PARTITION%:\ ^
- /Verify
+ /Verify ^
+ /ScratchDir:"%DISM_SCRATCH_PATH%"
 
 if errorlevel 1 (
 echo.
@@ -750,6 +847,11 @@ echo ==========================================
 echo.
 echo %GREEN%Restore completed successfully.%RESET%
 echo.
+
+if defined SCRATCH_CREATED (
+    rd /s /q "%DISM_SCRATCH_PATH%" 2>nul
+)
+
 goto EndLB
 
 :SHOWHELP

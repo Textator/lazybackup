@@ -85,6 +85,7 @@ for %%I in ("%~dp0.") do set "SCRIPT_DIR=%%~fI"
 for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
 
 set "BUILDER_FILES=%SCRIPT_DIR%\Builder files"
+set "DRIVER_ROOT=%SCRIPT_DIR%\Drivers"
 set "ISO_OUTPUT_DIRECTORY=%PROJECT_ROOT%\ISO output"
 set "MARKER_EXAMPLES=%PROJECT_ROOT%\marker files examples"
 
@@ -144,6 +145,8 @@ set "LAZYBACKUP_VERSION="
 set "ISO_VERSION="
 set "ISO_LABEL=LAZYBACKUP_WINPE"
 set "WIM_IMAGE_NAME=lazyBackup WinPE"
+set "DRIVER_INF_COUNT=0"
+set "THIRD_PARTY_DRIVER_COUNT=0"
 
 REM ADK Deployment Tools path
 set "ADKTOOLS=%ProgramFiles(x86)%\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools"
@@ -430,6 +433,42 @@ if errorlevel 1 (
 )
 
 REM --------------------------------------------------
+REM Add optional WinPE drivers recursively
+REM --------------------------------------------------
+REM All signed driver packages below ISO builder\Drivers
+REM are added recursively to the mounted WinPE image.
+REM Missing or empty means no additional drivers.
+REM --------------------------------------------------
+set "DRIVER_INF_COUNT=0"
+if exist "%DRIVER_ROOT%\" (
+    for /R "%DRIVER_ROOT%" %%F in (*.inf) do set /a DRIVER_INF_COUNT+=1
+)
+if "!DRIVER_INF_COUNT!"=="0" (
+    echo No optional WinPE driver packages were found.
+    echo Checked: %DRIVER_ROOT%
+    echo.
+) else (
+    echo Adding optional WinPE drivers recursively...
+    echo Driver directory: %DRIVER_ROOT%
+    echo INF files found: !DRIVER_INF_COUNT!
+    echo.
+    Dism /English /Image:"%MOUNTDIR%" /Add-Driver /Driver:"%DRIVER_ROOT%" /Recurse
+    if errorlevel 1 (
+        echo ERROR: Failed to add one or more WinPE drivers.
+        goto DISCARD_IMAGE
+    )
+    echo.
+    echo Verifying the driver store in the mounted image...
+    Dism /English /Image:"%MOUNTDIR%" /Get-Drivers /Format:Table >nul
+    if errorlevel 1 (
+        echo ERROR: DISM could not read back the WinPE driver store.
+        goto DISCARD_IMAGE
+    )
+    echo Optional WinPE drivers added successfully.
+    echo.
+)
+
+REM --------------------------------------------------
 REM Add choice.exe
 REM --------------------------------------------------
 
@@ -599,45 +638,6 @@ echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
     "$ErrorActionPreference = 'Stop'; " ^
     "Export-WindowsImage " ^
-    "    -SourceImagePath $env:ORIGINAL_BOOT_WIM " ^
-    "    -SourceIndex 1 " ^
-    "    -DestinationImagePath $env:RENAMED_BOOT_WIM " ^
-    "    -DestinationName $env:WIM_IMAGE_NAME " ^
-    "    -CompressionType Max " ^
-    "    -CheckIntegrity " ^
-    "    -Setbootable | Out-Null"
-
-if errorlevel 1 (
-    echo ERROR: Failed to export and rename boot.wim.
-    goto FAILED
-)
-
-if not exist "!RENAMED_BOOT_WIM!" (
-    echo ERROR: The renamed boot.wim was not created.
-    goto FAILED
-)
-
-REM --------------------------------------------------
-REM Set WinPE WIM image name and optimize boot.wim
-REM --------------------------------------------------
-
-set "ORIGINAL_BOOT_WIM=%MEDIA%\sources\boot.wim"
-set "RENAMED_BOOT_WIM=%MEDIA%\sources\boot-renamed.wim"
-
-if exist "!RENAMED_BOOT_WIM!" (
-    del /f /q "!RENAMED_BOOT_WIM!"
-)
-
-echo Setting WinPE image name:
-echo   !WIM_IMAGE_NAME!
-echo.
-
-echo Exporting and optimizing boot.wim...
-echo.
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$ErrorActionPreference = 'Stop'; " ^
-    "Export-WindowsImage " ^
     "-SourceImagePath $env:ORIGINAL_BOOT_WIM " ^
     "-SourceIndex 1 " ^
     "-DestinationImagePath $env:RENAMED_BOOT_WIM " ^
@@ -772,7 +772,9 @@ echo.
 echo WinPE image name:
 echo   !WIM_IMAGE_NAME!
 echo.
-
+echo Optional WinPE driver INF files found:
+echo   !DRIVER_INF_COUNT!
+echo.
 echo Supported boot modes:
 echo   - Legacy BIOS
 echo   - UEFI

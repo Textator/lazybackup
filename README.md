@@ -22,7 +22,7 @@ Test newly built recovery media in a virtual machine before using it on physical
 ## Current development version
 
 ```text
-v0.8.8
+v0.9.1
 ```
 
 ## Main features
@@ -37,6 +37,15 @@ v0.8.8
 - Prefer `.USBBACKUPSTORE` over `.BACKUPSTORE`
 - Store images in optional computer-specific subdirectories
 - Create timestamped image filenames
+- Evaluate and persist DISM exit codes for Backup and Restore
+- Optionally validate a newly created WIM with `DISM /Get-WimInfo`
+- Persist the last operation result and a local DISM log copy on the Windows partition
+- Show a success message after the next Windows logon
+- Show a high-visibility HTA error dialog after a failed operation
+- Optionally create `lazyBackup FAILED.txt` on the desktop
+- Optionally write results to the Windows Application log
+- Reboot after a failed unattended Backup by default so Windows can report the failure
+- Keep WinPE open after a failed Restore by default
 - Select a configurable WIM subdirectory, with `WIM` as the Enter default
 - Select a free network drive letter automatically from `Z:` backwards
 - Skip `X:` during automatic network mapping because `X:` is the WinPE RAM drive
@@ -50,6 +59,7 @@ v0.8.8
 - Select or preconfigure the WinPE keyboard layout
 - Build a BIOS and UEFI bootable lazyBackup WinPE ISO
 - Build a combined Windows 11 and lazyBackup ISO with two boot entries
+- Update lazyBackup in an existing combined Windows 11 ISO without rebuilding from the original Windows source ISO
 - Integrate lazyBackup Recovery into the Windows Boot Manager
 - Automatically request administrator privileges through Windows UAC in both ISO builders
 - Use portable project-relative paths with optional absolute overrides
@@ -62,6 +72,10 @@ lazybackup\
 ├── .lazybackup.conf
 ├── README.md
 ├── LICENSE
+│
+├── ResultNotification\
+│   ├── lazyBackup_Result.hta
+│   └── lazyBackup_ResultNotifier.ps1
 │
 ├── Windows ISO here\
 │   └── exactly one Windows ISO
@@ -80,6 +94,7 @@ lazybackup\
 ├── ISO builder\
 │   ├── build_lazyBackup_WinPE.bat
 │   ├── build_Windows11_with_lazyBackup_in_ISO-boot-menu.bat
+│   ├── update_lazyBackup_in_existing_Windows11_ISO.bat
 │   └── Builder files\
 │       ├── choice.exe
 │       ├── findstr.exe
@@ -92,6 +107,8 @@ lazybackup\
 The ISO builders determine their own location through `%~dp0` and use the parent directory as the lazyBackup project root. Therefore, the builders can be started from another current working directory.
 
 Technical helper files are grouped under `ISO builder\Builder files`. Marker-file examples remain visible in `marker files examples` so they can be copied by the user when needed. The dedicated WinPE builder also copies these examples into the WinPE image.
+
+The result-notification files belong in `ResultNotification\` beside the main project files. They run under the installed Windows system after reboot, not inside WinPE. The Boot Manager integration copies them to its stable local directory and registers the PowerShell notifier for user logon.
 
 ## Requirements
 
@@ -527,6 +544,56 @@ Automatic behavior:
 - Restore: avoid the restore target partition
 - final fallback: use `X:\Temp`
 
+### `VERIFY_BACKUP_IMAGE`
+
+```ini
+VERIFY_BACKUP_IMAGE=Y
+```
+
+`Y` runs an additional `DISM /Get-WimInfo` check against the newly created WIM before Backup is reported as successful. `N` disables this additional check.
+
+### `BACKUP_FAILURE_ACTION`
+
+```ini
+BACKUP_FAILURE_ACTION=R
+```
+
+Action after a failed Backup:
+
+- `R` = reboot
+- `S` = shut down
+- `N` = remain in WinPE
+
+The default is `R`. The existing Windows installation remains available after a failed Backup, and Windows can display the persistent failure notification after reboot and logon.
+
+### `RESTORE_FAILURE_ACTION`
+
+```ini
+RESTORE_FAILURE_ACTION=N
+```
+
+Action after a failed Restore:
+
+- `R` = reboot
+- `S` = shut down
+- `N` = remain in WinPE
+
+The safe default is `N`. An incomplete Restore can leave the target Windows installation unable to boot, so lazyBackup remains in WinPE instead of restarting automatically.
+
+### Windows result notifications
+
+```ini
+SHOW_SUCCESS_MESSAGE=Y
+SHOW_FAILURE_DIALOG=Y
+CREATE_DESKTOP_NOTICE=Y
+WRITE_EVENTLOG=Y
+```
+
+- `SHOW_SUCCESS_MESSAGE=Y` displays a Windows message box after a successful operation.
+- `SHOW_FAILURE_DIALOG=Y` displays the large red HTA failure dialog.
+- `CREATE_DESKTOP_NOTICE=Y` creates `lazyBackup FAILED.txt` on the desktop after failure.
+- `WRITE_EVENTLOG=Y` writes the result to the Windows Application log using the source `lazyBackup`.
+
 ### `KEYBOARD_LAYOUT`
 
 Available presets:
@@ -683,11 +750,11 @@ Default output:
 ISO output\lazyBackup_WinPE.iso
 ```
 
-Example metadata for lazyBackup v0.8.8:
+Example metadata for lazyBackup v0.9.1:
 
 ```text
-WIM image name: lazyBackup WinPE v0.8.8
-ISO label:      LAZYBACKUP_WINPE_0_8_8
+WIM image name: lazyBackup WinPE v0.9.1
+ISO label:      LAZYBACKUP_WINPE_0_9_1
 ```
 
 The ISO uses:
@@ -765,6 +832,116 @@ Legacy BIOS
 UEFI
 ```
 
+## Updating lazyBackup in an existing combined ISO
+
+If only the lazyBackup WinPE image has changed, the combined Windows 11 and lazyBackup ISO does not need to be rebuilt from the original Windows source ISO.
+
+Start:
+
+```text
+ISO builder\update_lazyBackup_in_existing_Windows11_ISO.bat
+```
+
+The update builder uses:
+
+- an existing combined Windows 11 and lazyBackup ISO
+- the current `ISO output\lazyBackup_WinPE.iso`
+- Windows ADK Deployment Tools with `Oscdimg.exe`
+
+By default, the update builder expects exactly one existing combined ISO matching:
+
+```text
+ISO output\*_lazy.iso
+```
+
+It creates a new ISO beside the source using this default name:
+
+```text
+<existing-name>_updated.iso
+```
+
+The source ISO is never modified or overwritten.
+
+### Files replaced by the update mode
+
+The update builder copies these files from the new dedicated lazyBackup WinPE ISO:
+
+```text
+New lazyBackup ISO                       Existing combined ISO working copy
+\sources\boot.wim                       -> \sources\lazyBackup.wim
+\boot\boot.sdi                          -> \boot\lazyBackup.sdi
+```
+
+All Windows Setup files remain unchanged. The existing BIOS and UEFI BCD stores are also preserved because their lazyBackup entries already reference the fixed paths:
+
+```text
+\sources\lazyBackup.wim
+\boot\lazyBackup.sdi
+```
+
+### Update process
+
+The update builder:
+
+1. requests administrator elevation when required
+2. checks PowerShell, Robocopy, DISM, Bcdedit, and Oscdimg
+3. locates the existing combined ISO and the new `lazyBackup_WinPE.iso`
+4. mounts both source ISOs
+5. copies the existing combined ISO into a temporary working directory
+6. validates the new lazyBackup `boot.wim` with DISM
+7. replaces `lazyBackup.wim` and `lazyBackup.sdi`
+8. validates the copied `lazyBackup.wim` again
+9. verifies that both BIOS and UEFI BCD stores reference the expected WIM and SDI paths
+10. preserves the source ISO volume label
+11. creates a new BIOS and UEFI bootable ISO
+12. verifies that the output ISO exists and is not empty
+
+The working directory defaults to:
+
+```text
+%TEMP%\lazyBackup_Build\Update Combined ISO
+```
+
+### Optional absolute update paths
+
+The update builder supports these optional overrides:
+
+```bat
+set "CONFIG_COMBINED_ISO="
+set "CONFIG_LAZYBACKUP_ISO="
+set "CONFIG_OUTPUT_ISO="
+set "CONFIG_WORKDIR="
+```
+
+Example:
+
+```bat
+set "CONFIG_COMBINED_ISO=E:\Programme\git\lazyBackup\ISO output\Windows11_lazy.iso"
+set "CONFIG_LAZYBACKUP_ISO=E:\Programme\git\lazyBackup\ISO output\lazyBackup_WinPE.iso"
+set "CONFIG_OUTPUT_ISO=E:\Programme\git\lazyBackup\ISO output\Windows11_lazy_updated.iso"
+set "CONFIG_WORKDIR="
+```
+
+Configure `CONFIG_COMBINED_ISO` explicitly when more than one `*_lazy.iso` exists in `ISO output\` or when the source uses another filename.
+
+### When to use the update mode
+
+Use the update mode when changes are limited to the lazyBackup WinPE image, for example:
+
+- updated `lazybackup.bat`
+- updated `.lazybackup.conf`
+- updated `startnet.cmd`
+- added or updated WinPE drivers
+- other files contained inside the lazyBackup `boot.wim`
+
+Rebuild the complete combined ISO from the original Windows source ISO when changing:
+
+- the Windows source ISO or Windows Setup files
+- BIOS or UEFI BCD structure
+- boot-menu descriptions or timeout
+- the lazyBackup WIM or SDI paths
+- ISO metadata that should be regenerated from a different Windows source
+
 ## Optional absolute builder overrides
 
 Both builders use portable relative paths by default. Their configuration sections can still define absolute path overrides when required.
@@ -784,6 +961,15 @@ set "CONFIG_WINDOWS11_ISO="
 set "CONFIG_LAZYBACKUP_ISO="
 ```
 
+The update builder additionally supports:
+
+```bat
+set "CONFIG_COMBINED_ISO="
+set "CONFIG_LAZYBACKUP_ISO="
+set "CONFIG_OUTPUT_ISO="
+set "CONFIG_WORKDIR="
+```
+
 Leave these values empty to use the portable project structure.
 
 ## Windows Boot Manager integration
@@ -794,15 +980,46 @@ Start:
 install lazyBackup to Boot Menu BCD\lazyBackup_BootIntegration.bat
 ```
 
-Run the script as Administrator under full Windows.
-
-Stable boot files are stored outside the synchronized portable-program directory:
+Run the script as Administrator under full Windows. Stable boot files are stored outside the synchronized portable-program directory:
 
 ```text
 C:\ProgramData\lazyBackup_WinPE_Boot\
 ```
 
-The integration can install, repair, update, display status, boot once into lazyBackup Recovery, or remove the integration. Windows remains the normal default entry.
+The repository source files for Windows result reporting must be located here:
+
+```text
+ResultNotification\
+├── lazyBackup_Result.hta
+└── lazyBackup_ResultNotifier.ps1
+```
+
+The Boot Manager integration copies them to:
+
+```text
+C:\ProgramData\lazyBackup_WinPE_Boot\ResultNotification\
+├── lazyBackup_Result.hta
+└── lazyBackup_ResultNotifier.ps1
+```
+
+It registers `lazyBackup_ResultNotifier.ps1` for user logon and creates the `lazyBackup` Event Log source when possible. The integration can install, repair, update, display status, boot once into lazyBackup Recovery, or remove the integration. Windows remains the normal default boot entry.
+
+### Persistent result files
+
+During Backup or Restore, lazyBackup writes the result to the selected offline Windows partition. Under normal Windows the files are available as:
+
+```text
+C:\ProgramData\lazyBackup\LastOperation.ini
+C:\ProgramData\lazyBackup\LastOperation.dism.log
+```
+
+After logon:
+
+- success displays a message box and removes the successful status file
+- failure displays the high-visibility HTA dialog
+- failure can also create `lazyBackup FAILED.txt` on the desktop
+- the HTA can open the local log copy and the image folder
+- a displayed failure is marked with `DISPLAYED=1` so it is not repeatedly shown at every later logon
 
 ## Recommended tests before deployment
 
@@ -812,6 +1029,12 @@ Verify in a virtual machine:
 - dedicated WinPE ISO in UEFI mode
 - combined ISO in Legacy BIOS mode
 - combined ISO in UEFI mode
+- updated combined ISO in Legacy BIOS mode
+- updated combined ISO in UEFI mode
+- Windows Setup entry after update
+- lazyBackup Recovery entry after update
+- updated lazyBackup drivers and files inside the combined ISO
+- confirmation that the original combined ISO remains unchanged
 - Windows Setup boot entry
 - lazyBackup Recovery boot entry
 - keyboard preset and keyboard menu
@@ -826,6 +1049,15 @@ Verify in a virtual machine:
 - automatic Backup confirmation
 - cancellation with `N`
 - post-operation action and delay
+- Backup success notification after Windows logon
+- Backup failure HTA after Windows logon
+- HTA readability on a 4K display
+- desktop failure notice
+- Windows Application log entry
+- local DISM log opening from the HTA
+- additional WIM validation
+- failed Backup with `BACKUP_FAILURE_ACTION=R`
+- failed Restore with `RESTORE_FAILURE_ACTION=N`
 
 ## Troubleshooting
 
@@ -895,6 +1127,29 @@ Set one layout explicitly:
 KEYBOARD_LAYOUT=0407:00000407
 ```
 
+### Update builder finds no combined ISO
+
+By default, exactly one file matching `*_lazy.iso` must exist in `ISO output\`. If no matching file is present, set `CONFIG_COMBINED_ISO` to the complete source ISO path.
+
+### Update builder finds more than one combined ISO
+
+Set `CONFIG_COMBINED_ISO` explicitly or temporarily keep only the intended source `*_lazy.iso` in `ISO output\`. The updater does not guess which ISO should be modified.
+
+### Update builder reports invalid BCD references
+
+The existing combined ISO must contain BIOS and UEFI BCD entries referencing:
+
+```text
+\sources\lazyBackup.wim
+\boot\lazyBackup.sdi
+```
+
+If either reference is missing, rebuild the combined ISO with the full combined builder instead of using update mode.
+
+### Updated ISO does not contain the expected lazyBackup changes
+
+First rebuild `ISO output\lazyBackup_WinPE.iso` with the dedicated WinPE builder. The update mode copies `boot.wim` and `boot.sdi` from that ISO and does not rebuild the WinPE image itself.
+
 ### Combined builder finds no Windows ISO
 
 Place exactly one `*.iso` file in:
@@ -912,6 +1167,34 @@ Keep exactly one Windows ISO in `Windows ISO here`, or configure `CONFIG_WINDOWS
 ### Oscdimg reports that the volume label is too long
 
 The current builder shortens the generated label immediately before calling Oscdimg. The final label keeps `_LAZY` and is limited to 32 characters.
+
+### No result notification appears after Windows logon
+
+Verify that both notification files exist below:
+
+```text
+C:\ProgramData\lazyBackup_WinPE_Boot\ResultNotification\
+```
+
+Verify the `lazyBackupResultNotifier` value below:
+
+```text
+HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+```
+
+Also check whether this result file exists:
+
+```text
+C:\ProgramData\lazyBackup\LastOperation.ini
+```
+
+### Failure dialog appears only once
+
+This is intentional. After displaying a failure, the notifier writes `DISPLAYED=1` to `LastOperation.ini`. The status and local log copy remain available, but the dialog is not shown repeatedly at every logon.
+
+### Failure dialog is too small on a high-resolution display
+
+The supplied HTA uses enlarged text and a larger window for high-resolution displays. Replace the files in `ResultNotification\` and run **Install or repair integration** again so the updated files are copied to the stable local directory.
 
 ## License
 

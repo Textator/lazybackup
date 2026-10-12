@@ -1,1 +1,5 @@
-lazyBackup_WinPE.iso
+*.iso
+/ISO builder/Builder files/choice.exe
+/ISO builder/Builder files/findstr.exe
+/ISO builder/Drivers/**
+

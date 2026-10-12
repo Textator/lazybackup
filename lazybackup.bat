@@ -7,7 +7,7 @@ REM https://github.com/Textator/lazyBackup
 REM ==================================================
 
 REM script version
-set "SCRIPT_VERSION=0.9.0"
+set "SCRIPT_VERSION=0.9.1"
 
 title lazyBackup v%SCRIPT_VERSION%
 cls
@@ -123,6 +123,16 @@ REM DISM scratch directory
 REM Empty = automatic selection
 set "DISM_SCRATCH="
 
+REM Result reporting expert options. Y = enabled, N = disabled.
+set "VERIFY_BACKUP_IMAGE=Y"
+set "SHOW_SUCCESS_MESSAGE=Y"
+set "SHOW_FAILURE_DIALOG=Y"
+set "CREATE_DESKTOP_NOTICE=Y"
+set "WRITE_EVENTLOG=Y"
+REM Failure actions: R = reboot, S = shut down, N = stay in WinPE.
+set "BACKUP_FAILURE_ACTION=R"
+set "RESTORE_FAILURE_ACTION=N"
+
 REM **************************************************
 REM Configuration END - don't modify below
 REM **************************************************
@@ -230,6 +240,9 @@ echo Post action                 : !POST_OPERATION_ACTION!
 echo Post delay                  : !POST_OPERATION_DELAY_SECONDS! seconds
 echo Network mapping             : !MAP_NETWORK!
 echo Scratch preset              : !DISM_SCRATCH!
+echo Verify backup image          : !VERIFY_BACKUP_IMAGE!
+echo Backup failure action        : !BACKUP_FAILURE_ACTION!
+echo Restore failure action       : !RESTORE_FAILURE_ACTION!
 echo.
 
 REM ==================================================
@@ -1113,29 +1126,50 @@ DISM ^
  /Compress:max ^
  /Verify ^
  /ScratchDir:"%DISM_SCRATCH_PATH%"
+set "DISM_EXIT=!ERRORLEVEL!"
+set "VERIFY_EXIT=0"
+if not "!DISM_EXIT!"=="0" goto BACKUP_FAILED
 
-echo.
-if errorlevel 1 (
-echo %RED%Backup failed.%RESET%
-Goto EXITONLY
+if /I "%VERIFY_BACKUP_IMAGE%"=="Y" (
+    echo.
+    echo Verifying the created WIM with DISM /Get-WimInfo...
+    DISM /English /Get-WimInfo /WimFile:"%BACKUP_IMAGE_FILE%" /LogPath:"%BACKUP_IMAGE_FILE:.wim=.log%" >nul
+    set "VERIFY_EXIT=!ERRORLEVEL!"
+    if not "!VERIFY_EXIT!"=="0" goto BACKUP_FAILED
 )
-
+call :WRITE_RESULT_STATUS "BACKUP" "SUCCESS" "%WINDOWS_PARTITION%" "%BACKUP_IMAGE_FILE%" "%BACKUP_IMAGE_FILE:.wim=.log%" "!DISM_EXIT!" "!VERIFY_EXIT!"
 echo.
 echo ==========================================
 echo                SUCCESS
 echo ==========================================
 echo.
-echo %GREEN%Backup completed successfully.%RESET%
+echo %GREEN%Backup completed and verified successfully.%RESET%
 echo.
 echo Image:    %BACKUP_IMAGE_FILE%
 echo Log file: %BACKUP_IMAGE_FILE:.wim=.log%
 echo.
-
-if defined SCRATCH_CREATED (
-    rd /s /q "%DISM_SCRATCH_PATH%" 2>nul
-)
-
+call :CLEAN_SCRATCH
 goto EndLB
+
+:BACKUP_FAILED
+call :WRITE_RESULT_STATUS "BACKUP" "FAILED" "%WINDOWS_PARTITION%" "%BACKUP_IMAGE_FILE%" "%BACKUP_IMAGE_FILE:.wim=.log%" "!DISM_EXIT!" "!VERIFY_EXIT!"
+echo.
+echo ==========================================
+echo                 FAILED
+echo ==========================================
+echo.
+echo %RED%Backup failed or WIM verification failed.%RESET%
+echo DISM exit code   : !DISM_EXIT!
+echo Verification code: !VERIFY_EXIT!
+echo Log file         : %BACKUP_IMAGE_FILE:.wim=.log%
+echo.
+call :CLEAN_SCRATCH
+set "POST_OPERATION_ACTION=%BACKUP_FAILURE_ACTION%"
+if /I "!POST_OPERATION_ACTION!"=="R" goto EndLB
+if /I "!POST_OPERATION_ACTION!"=="S" goto EndLB
+echo WinPE remains open because BACKUP_FAILURE_ACTION=N or is invalid.
+pause
+goto MAINMENU
 
 :DETECT_RESTORE_SOURCE_INIT
 wpeinit >nul 2>&1
@@ -1544,20 +1578,20 @@ set /p RESTCONFIRM=Start restore [Y/N\]:
 if /I not "%RESTCONFIRM%"=="Y" goto MAINMENU
 
 REM DISM apply
+set "RESTORE_STATUS_DIR=%RESTORE_PARTITION%:\ProgramData\lazyBackup"
+if not exist "!RESTORE_STATUS_DIR!" mkdir "!RESTORE_STATUS_DIR!" >nul 2>&1
+set "RESTORE_DISM_LOG=%DISM_SCRATCH_PATH%\restore-dism.log"
 DISM ^
  /Apply-Image ^
  /ImageFile:"%RESTORE_IMAGE_FILE%" ^
  /Index:!RESTORE_IMAGE_INDEX! ^
  /ApplyDir:%RESTORE_PARTITION%:\ ^
  /Verify ^
+ /LogPath:"!RESTORE_DISM_LOG!" ^
  /ScratchDir:"%DISM_SCRATCH_PATH%"
-
-if errorlevel 1 (
-echo.
-echo Restore failed.
-goto EXITONLY
-)
-::Restore success
+set "DISM_EXIT=!ERRORLEVEL!"
+if not "!DISM_EXIT!"=="0" goto RESTORE_FAILED
+call :WRITE_RESULT_STATUS "RESTORE" "SUCCESS" "%RESTORE_PARTITION%" "%RESTORE_IMAGE_FILE%" "!RESTORE_DISM_LOG!" "!DISM_EXIT!" "0"
 echo.
 echo ==========================================
 echo                SUCCESS
@@ -1565,12 +1599,63 @@ echo ==========================================
 echo.
 echo %GREEN%Restore completed successfully.%RESET%
 echo.
+call :CLEAN_SCRATCH
+goto EndLB
 
+:RESTORE_FAILED
+call :WRITE_RESULT_STATUS "RESTORE" "FAILED" "%RESTORE_PARTITION%" "%RESTORE_IMAGE_FILE%" "!RESTORE_DISM_LOG!" "!DISM_EXIT!" "0"
+echo.
+echo ==========================================
+echo                 FAILED
+echo ==========================================
+echo.
+echo %RED%Restore failed.%RESET%
+echo DISM exit code: !DISM_EXIT!
+echo Log file      : !RESTORE_DISM_LOG!
+echo.
+call :CLEAN_SCRATCH
+set "POST_OPERATION_ACTION=%RESTORE_FAILURE_ACTION%"
+if /I "!POST_OPERATION_ACTION!"=="R" goto EndLB
+if /I "!POST_OPERATION_ACTION!"=="S" goto EndLB
+echo Windows will not be restarted. WinPE remains open.
+pause
+goto MAINMENU
+
+:CLEAN_SCRATCH
 if defined SCRATCH_CREATED (
     rd /s /q "%DISM_SCRATCH_PATH%" 2>nul
+    set "SCRATCH_CREATED="
 )
+exit /b 0
 
-goto EndLB
+:WRITE_RESULT_STATUS
+set "RESULT_OPERATION=%~1"
+set "RESULT_STATE=%~2"
+set "RESULT_WINDOWS_DRIVE=%~3"
+set "RESULT_IMAGE=%~4"
+set "RESULT_SOURCE_LOG=%~5"
+set "RESULT_DISM_EXIT=%~6"
+set "RESULT_VERIFY_EXIT=%~7"
+set "RESULT_STATUS_DIR=!RESULT_WINDOWS_DRIVE!:\ProgramData\lazyBackup"
+set "RESULT_STATUS_FILE=!RESULT_STATUS_DIR!\LastOperation.ini"
+set "RESULT_LOG_FILE=!RESULT_STATUS_DIR!\LastOperation.dism.log"
+if not exist "!RESULT_STATUS_DIR!" mkdir "!RESULT_STATUS_DIR!" >nul 2>&1
+if not exist "!RESULT_STATUS_DIR!" exit /b 1
+if exist "!RESULT_SOURCE_LOG!" copy /y "!RESULT_SOURCE_LOG!" "!RESULT_LOG_FILE!" >nul 2>&1
+>"!RESULT_STATUS_FILE!" echo OPERATION=!RESULT_OPERATION!
+>>"!RESULT_STATUS_FILE!" echo RESULT=!RESULT_STATE!
+>>"!RESULT_STATUS_FILE!" echo DATE=%DATE% %TIME%
+>>"!RESULT_STATUS_FILE!" echo COMPUTER=!COMPUTER_NAME!
+>>"!RESULT_STATUS_FILE!" echo IMAGE=!RESULT_IMAGE!
+>>"!RESULT_STATUS_FILE!" echo LOG=%%ProgramData%%\lazyBackup\LastOperation.dism.log
+>>"!RESULT_STATUS_FILE!" echo DISM_EXIT=!RESULT_DISM_EXIT!
+>>"!RESULT_STATUS_FILE!" echo VERIFY_EXIT=!RESULT_VERIFY_EXIT!
+>>"!RESULT_STATUS_FILE!" echo SHOW_SUCCESS_MESSAGE=!SHOW_SUCCESS_MESSAGE!
+>>"!RESULT_STATUS_FILE!" echo SHOW_FAILURE_DIALOG=!SHOW_FAILURE_DIALOG!
+>>"!RESULT_STATUS_FILE!" echo CREATE_DESKTOP_NOTICE=!CREATE_DESKTOP_NOTICE!
+>>"!RESULT_STATUS_FILE!" echo WRITE_EVENTLOG=!WRITE_EVENTLOG!
+>>"!RESULT_STATUS_FILE!" echo DISPLAYED=0
+exit /b 0
 
 :SHOWHELP
 echo.
@@ -1845,6 +1930,13 @@ for /F "usebackq eol=# tokens=1,* delims==" %%A in ("%~1") do (
     if /I "%%A"=="DISM_SCRATCH" (
         if not "%%B"=="" set "DISM_SCRATCH=%%B"
     )
+    if /I "%%A"=="VERIFY_BACKUP_IMAGE" if not "%%B"=="" set "VERIFY_BACKUP_IMAGE=%%B"
+    if /I "%%A"=="BACKUP_FAILURE_ACTION" if not "%%B"=="" set "BACKUP_FAILURE_ACTION=%%B"
+    if /I "%%A"=="RESTORE_FAILURE_ACTION" if not "%%B"=="" set "RESTORE_FAILURE_ACTION=%%B"
+    if /I "%%A"=="SHOW_SUCCESS_MESSAGE" if not "%%B"=="" set "SHOW_SUCCESS_MESSAGE=%%B"
+    if /I "%%A"=="SHOW_FAILURE_DIALOG" if not "%%B"=="" set "SHOW_FAILURE_DIALOG=%%B"
+    if /I "%%A"=="CREATE_DESKTOP_NOTICE" if not "%%B"=="" set "CREATE_DESKTOP_NOTICE=%%B"
+    if /I "%%A"=="WRITE_EVENTLOG" if not "%%B"=="" set "WRITE_EVENTLOG=%%B"
 )
 
 exit /b 0

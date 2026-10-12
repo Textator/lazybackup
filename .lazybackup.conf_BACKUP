@@ -1,0 +1,403 @@
+# ==================================================
+# lazyBackup external configuration
+# ==================================================
+#
+# Do not use spaces around the equals sign.
+#
+# Correct:
+# NAME=Value
+#
+# Incorrect:
+# NAME = Value
+#
+# Empty values do not override settings that were
+# configured elsewhere.
+# ==================================================
+
+# ==================================================
+# Unattended backup requirements
+# ==================================================
+#
+# For an unattended automatic backup, for example
+# after a scheduled boot started by Task Scheduler,
+# the following settings must be configured:
+#
+# WIM_SUBDIR=WIM
+# POST_OPERATION_ACTION=R
+# MAP_NETWORK=N
+# KEYBOARD_LAYOUT=0407:00000407
+#
+# The automatic backup mode and its countdown must
+# also be enabled:
+#
+# OPERATION_MODE=B
+# OPERATION_MODE_TIMEOUT_SECONDS=15
+# BACKUP_CONFIRM_TIMEOUT_SECONDS=15
+#
+# Required values must not be empty or commented out.
+#
+# The following marker files should also be present:
+#
+# .pcname
+#   Contains the computer name used for the backup.
+#
+# .DRIVETOBACKUP
+#   Marks the Windows partition to be backed up.
+#
+# .BACKUPSTORE
+#   Marks the local backup storage.
+#
+# Or, for preferred USB backup storage:
+#
+# .USBBACKUPSTORE
+#
+# With these settings and marker files, lazyBackup
+# can select the backup operation, source partition,
+# destination, WIM subdirectory, keyboard layout and
+# post-operation action without user interaction.
+#
+# MAP_NETWORK=N is suitable only when the unattended
+# backup does not need to create a network mapping.
+#
+# For an unattended network backup, NETWORK_PATH,
+# NETWORK_USERNAME and suitable authentication must
+# also be available without an interactive prompt.
+#
+# Restore is never started automatically when:
+#
+# OPERATION_MODE=B
+#
+# Restore remains manually selectable during the
+# operation-mode countdown by pressing R.
+# ==================================================
+
+
+# ==================================================
+# WinPE startup and source locations
+# ==================================================
+#
+# These paths are used by the WinPE startup script
+# to find a newer synchronized lazyBackup version
+# and the current lazyBackup WinPE ISO.
+#
+# Specify each path relative to the drive root.
+#
+# Do not include a drive letter because WinPE scans
+# the available drives automatically.
+#
+# Correct:
+# \ProgramData\Programme_portable\...
+#
+# Incorrect:
+# C:\ProgramData\Programme_portable\...
+# ==================================================
+
+EXTERNAL_LAZYBACKUP_PATH=\ProgramData\Programme_portable\Sicherheit\lazybackup\lazybackup.bat
+EXTERNAL_WINPE_ISO_PATH=\ProgramData\Programme_portable\Sicherheit\lazybackup\WinPE ISO\lazyBackup_WinPE.iso
+
+
+# ==================================================
+# Computer-specific backup subdirectory
+# ==================================================
+#
+# Y = Store images in:
+#     WIM_SUBDIR\COMPUTER_NAME\
+#
+# N = Store all images directly in:
+#     WIM_SUBDIR\
+#
+# Example with Y:
+# Z:\WIM\PC-NAME\PC-NAME_20261001_1430.wim
+#
+# Example with N:
+# Z:\WIM\PC-NAME_20261001_1430.wim
+# ==================================================
+
+USE_COMPUTER_NAME_SUBFOLDER=Y
+
+
+# ==================================================
+# Image storage subdirectory
+# ==================================================
+#
+# This directory is created below the selected local,
+# USB or network storage root.
+#
+# Examples:
+# WIM
+# Images
+# Backups\Windows
+#
+# An active value skips the subdirectory prompt.
+#
+# To display the subdirectory prompt and use WIM only
+# when ENTER is pressed, comment out this line:
+#
+# # WIM_SUBDIR=WIM
+# ==================================================
+
+WIM_SUBDIR=
+
+
+# ==================================================
+# Fixed backup storage location
+# ==================================================
+#
+# A fixed value skips automatic storage detection.
+#
+# Local examples:
+# STORAGE_PATH=E
+# STORAGE_PATH=F
+#
+# UNC example:
+# STORAGE_PATH=\\server\share
+#
+# Leave empty for marker-file detection, mapped
+# network storage or manual storage selection.
+# ==================================================
+
+STORAGE_PATH=
+
+
+# ==================================================
+# Initial operation
+# ==================================================
+#
+# B = Backup is the timed default
+# R = Restore is the timed default
+#
+# The main menu remains visible during the countdown.
+# Another operation can be selected before the timer
+# expires.
+#
+# Leave OPERATION_MODE empty to disable the configured
+# default and wait indefinitely for a selection.
+# ==================================================
+
+OPERATION_MODE=B
+
+
+# ==================================================
+# Initial operation timeout
+# ==================================================
+#
+# Number of seconds before the configured operation
+# starts automatically.
+#
+# Examples:
+# 0  = do not start automatically
+# 10 = wait 10 seconds
+# 15 = wait 15 seconds
+# 30 = wait 30 seconds
+#
+# This value has an effect only when OPERATION_MODE
+# contains B or R.
+# ==================================================
+
+OPERATION_MODE_TIMEOUT_SECONDS=15
+
+
+# ==================================================
+# Automatic backup confirmation
+# ==================================================
+#
+# Number of seconds shown at the final backup summary
+# before the backup starts automatically.
+#
+# Y starts the backup immediately.
+# N cancels the backup.
+# No input starts the backup after the countdown.
+#
+# Examples:
+# 0  = wait indefinitely for Y or N
+# 5  = start after 5 seconds
+# 10 = start after 10 seconds
+# 15 = start after 15 seconds
+# 30 = start after 30 seconds
+# ==================================================
+
+BACKUP_CONFIRM_TIMEOUT_SECONDS=15
+
+
+# ==================================================
+# Action after successful backup or restore
+# ==================================================
+#
+# R = Reboot
+# S = Shut down
+# N = No reboot or shutdown
+#
+# Leave empty to display the post-operation menu:
+#
+# POST_OPERATION_ACTION=
+# ==================================================
+
+POST_OPERATION_ACTION=S
+
+
+# ==================================================
+# Delay before the post-operation action
+# ==================================================
+#
+# Value is specified in seconds.
+#
+# Examples:
+# 0   = Execute immediately
+# 10  = Wait 10 seconds
+# 30  = Wait 30 seconds
+# 120 = Wait 2 minutes
+# 300 = Wait 5 minutes
+# ==================================================
+
+POST_OPERATION_DELAY_SECONDS=30
+
+
+# ==================================================
+# Network storage configuration
+# ==================================================
+#
+# N = Skip the network-storage prompt completely
+#
+# Any other value, including an empty value, allows
+# the interactive network-storage configuration.
+#
+# Use this to enable the network prompt:
+#
+# MAP_NETWORK=
+#
+# The following setting disables network mapping:
+# ==================================================
+
+MAP_NETWORK=
+
+
+# ==================================================
+# Network drive letter
+# ==================================================
+#
+# Leave empty to select a free drive letter
+# automatically.
+#
+# Automatic selection searches backwards:
+# Z:, Y:, W:, V: ... D:
+#
+# X: is skipped because X: is the WinPE RAM drive.
+#
+# A manually configured drive letter takes priority.
+#
+# Optional fixed examples:
+# DRIVE_LETTER=Z:
+# DRIVE_LETTER=Y:
+#
+# Recommended automatic configuration:
+# ==================================================
+
+DRIVE_LETTER=
+
+
+# ==================================================
+# Network share path
+# ==================================================
+#
+# UNC path of the network share.
+#
+# Example:
+# NETWORK_PATH=\\192.168.170.9\v
+#
+# Leave empty to ask for the path interactively when
+# network mapping is enabled.
+# ==================================================
+
+NETWORK_PATH=
+
+
+# ==================================================
+# Network username
+# ==================================================
+#
+# Supported examples:
+# DOMAIN\USER
+# COMPUTER\USER
+# USER
+#
+# Leave empty to ask for the username interactively.
+# ==================================================
+
+NETWORK_USERNAME=
+
+
+# ==================================================
+# Network password
+# ==================================================
+#
+# Leave empty to let NET USE request the password
+# without displaying the entered characters.
+#
+# A password entered here is stored as readable text.
+# Keeping this value empty is therefore recommended.
+# ==================================================
+
+PASSWORD=
+
+
+# ==================================================
+# DISM scratch directory
+# ==================================================
+#
+# Leave empty for automatic selection.
+#
+# For local backup storage, lazyBackup normally creates
+# a temporary directory on the selected storage drive.
+#
+# For network storage, lazyBackup selects an available
+# local drive because DISM scratch space should not be
+# placed on the network share.
+#
+# Optional fixed example:
+# DISM_SCRATCH=D:\lazyBackupTemp
+# ==================================================
+
+DISM_SCRATCH=
+
+
+# ==================================================
+# WinPE keyboard layout
+# ==================================================
+#
+# Exactly one KEYBOARD_LAYOUT line may be active.
+#
+# If all KEYBOARD_LAYOUT lines remain commented out,
+# the keyboard selection menu is displayed at startup.
+#
+# Remove the leading # from the desired layout.
+#
+# Available presets:
+#
+# German - Germany
+# KEYBOARD_LAYOUT=0407:00000407
+#
+# English - United States
+# KEYBOARD_LAYOUT=0409:00000409
+#
+# English - United Kingdom
+# KEYBOARD_LAYOUT=0809:00000809
+#
+# French - France
+# KEYBOARD_LAYOUT=040C:0000040C
+#
+# Spanish - Spain
+# KEYBOARD_LAYOUT=0C0A:0000040A
+#
+# ==================================================
+KEYBOARD_LAYOUT=0407:00000407
+
+# ==================================================
+# Result verification and Windows notifications
+# ==================================================
+VERIFY_BACKUP_IMAGE=Y
+BACKUP_FAILURE_ACTION=R
+RESTORE_FAILURE_ACTION=N
+SHOW_SUCCESS_MESSAGE=Y
+SHOW_FAILURE_DIALOG=Y
+CREATE_DESKTOP_NOTICE=Y
+WRITE_EVENTLOG=Y

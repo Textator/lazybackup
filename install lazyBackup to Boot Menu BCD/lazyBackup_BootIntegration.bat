@@ -26,6 +26,12 @@ set "BCD_BACKUP=%BOOT_DIR%\bcd-backup"
 set "LOG_DIR=%BOOT_DIR%\Logs"
 set "LOG_FILE=%LOG_DIR%\BootIntegration.log"
 set "BOOT_HELPER=%BOOT_DIR%\boot-into-lazybackup.cmd"
+set "RESULT_NOTIFIER=%BOOT_DIR%\lazyBackup_ResultNotifier.ps1"
+set "RESULT_DIALOG=%BOOT_DIR%\lazyBackup_Result.hta"
+set "SOURCE_NOTIFIER=%~dp0lazyBackup_ResultNotifier.ps1"
+set "SOURCE_DIALOG=%~dp0lazyBackup_Result.hta"
+set "RESULT_RUN_KEY=HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+set "RESULT_RUN_VALUE=lazyBackupResultNotifier"
 
 set "BOOT_DESCRIPTION=lazyBackup Recovery"
 set "RAMDISK_DESCRIPTION=lazyBackup Recovery Ramdisk"
@@ -244,6 +250,8 @@ if errorlevel 1 goto ACTION_FAILED
 
 call :WRITE_SOURCE_STATE
 call :CREATE_BOOT_HELPER
+call :INSTALL_RESULT_NOTIFIER
+if errorlevel 1 goto ACTION_FAILED
 call :LOG "Update completed from %SOURCE_ISO%."
 
 echo.
@@ -1122,6 +1130,27 @@ echo   Default entry : Current Windows
 echo   Timeout       : %BOOT_TIMEOUT% seconds
 echo.
 
+exit /b 0
+
+:INSTALL_RESULT_NOTIFIER
+if not exist "%SOURCE_NOTIFIER%" (
+    echo ERROR: Missing result notifier:
+    echo   %SOURCE_NOTIFIER%
+    exit /b 1
+)
+if not exist "%SOURCE_DIALOG%" (
+    echo ERROR: Missing result dialog:
+    echo   %SOURCE_DIALOG%
+    exit /b 1
+)
+copy /y "%SOURCE_NOTIFIER%" "%RESULT_NOTIFIER%" >nul
+if errorlevel 1 exit /b 1
+copy /y "%SOURCE_DIALOG%" "%RESULT_DIALOG%" >nul
+if errorlevel 1 exit /b 1
+reg add "%RESULT_RUN_KEY%" /v "%RESULT_RUN_VALUE%" /t REG_SZ /d "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ^"%RESULT_NOTIFIER%^"" /f >nul
+if errorlevel 1 exit /b 1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "if (-not [System.Diagnostics.EventLog]::SourceExists('lazyBackup')) { New-EventLog -LogName Application -Source lazyBackup }" >nul 2>&1
+echo Result notification installed for each user logon.
 exit /b 0
 
 :CREATE_BOOT_HELPER

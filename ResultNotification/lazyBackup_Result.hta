@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="x-ua-compatible" content="IE=9" />
+<title>lazyBackup: Backup or restore failed</title>
+<HTA:APPLICATION APPLICATIONNAME="lazyBackup" BORDER="dialog" CAPTION="yes" SHOWINTASKBAR="yes" SINGLEINSTANCE="yes" SCROLL="no" />
+<style>
+body { font-family:"Segoe UI",Arial,sans-serif; background:#fff; color:#222; margin:0; }
+.header { background:#b91c1c; color:#fff; padding:18px 22px; font-size:36px; font-weight:600; }
+.content { padding:20px 22px; font-size:23px; }
+.label { color:#555; width:230px; display:inline-block; vertical-align:top; font-size:24px; }
+.value { font-weight:600; display:inline-block; max-width:720px; word-wrap:break-word; font-size:24px; }
+.row { margin:16px 0; }
+.warning { background:#fff3cd; border:1px solid #e4c66a; padding:13px; margin:16px 0; font-size:23px; }
+.buttons { padding:0 22px 20px; text-align:right; }
+button { min-width:175px; padding:12px 18px; margin-left:8px; font-family:"Segoe UI"; font-size:20px; }
+</style>
+<script language="VBScript">
+Dim values,shell,fso,statusFile
+Set values=CreateObject("Scripting.Dictionary")
+Set shell=CreateObject("WScript.Shell")
+Set fso=CreateObject("Scripting.FileSystemObject")
+Sub Window_OnLoad
+ Dim windowWidth,windowHeight
+ windowWidth=1100
+ windowHeight=760
+ If screen.availWidth<1200 Then windowWidth=screen.availWidth-40
+ If screen.availHeight<800 Then windowHeight=screen.availHeight-40
+ window.resizeTo windowWidth,windowHeight
+ window.moveTo (screen.availWidth-windowWidth)/2,(screen.availHeight-windowHeight)/2
+ statusFile=shell.ExpandEnvironmentStrings("%LAZYBACKUP_STATUS_FILE%")
+ If fso.FileExists(statusFile) Then
+  Dim file,line,p,key,value
+  Set file=fso.OpenTextFile(statusFile,1,False)
+  Do Until file.AtEndOfStream
+   line=file.ReadLine
+   p=InStr(line,"=")
+   If p>0 Then
+    key=Left(line,p-1)
+    value=Mid(line,p+1)
+    values(key)=value
+   End If
+  Loop
+  file.Close
+ End If
+ Put "operation",Val("OPERATION")
+ Put "computer",Val("COMPUTER")
+ Put "date",Val("DATE")
+ Put "dism",Val("DISM_EXIT")
+ Put "verify",Val("VERIFY_EXIT")
+ Put "image",Val("IMAGE")
+ Put "log",shell.ExpandEnvironmentStrings(Val("LOG"))
+End Sub
+Function Val(name)
+ If values.Exists(name) Then
+  Val=values(name)
+ Else
+  Val=""
+ End If
+End Function
+Sub Put(id,value)
+ document.getElementById(id).innerText=value
+End Sub
+Sub OpenLog
+ Dim path
+ path=shell.ExpandEnvironmentStrings(Val("LOG"))
+ If fso.FileExists(path) Then
+  shell.Run "notepad.exe """&path&"""",1,False
+ Else
+  MsgBox "Log file not found:"&vbCrLf&path,48,"lazyBackup"
+ End If
+End Sub
+Sub OpenImageFolder
+ Dim path,folder
+ path=Val("IMAGE")
+ folder=fso.GetParentFolderName(path)
+ If fso.FolderExists(folder) Then
+  shell.Run "explorer.exe """&folder&"""",1,False
+ Else
+  MsgBox "Image folder is not currently available:"&vbCrLf&folder,48,"lazyBackup"
+ End If
+End Sub
+</script>
+</head>
+<body>
+<div class="header">lazyBackup: Backup or restore failed</div>
+<div class="content">
+<div class="warning">lazyBackup reported an error. Do not rely on the affected backup or restore until the log has been reviewed.</div>
+<div class="row"><span class="label">Operation:</span><span class="value" id="operation"></span></div>
+<div class="row"><span class="label">Computer:</span><span class="value" id="computer"></span></div>
+<div class="row"><span class="label">Date:</span><span class="value" id="date"></span></div>
+<div class="row"><span class="label">DISM exit code:</span><span class="value" id="dism"></span></div>
+<div class="row"><span class="label">Verification code:</span><span class="value" id="verify"></span></div>
+<div class="row"><span class="label">Image:</span><span class="value" id="image"></span></div>
+<div class="row"><span class="label">Local log copy:</span><span class="value" id="log"></span></div>
+</div>
+<div class="buttons"><button onclick="OpenLog">Open log</button><button onclick="OpenImageFolder">Open image folder</button><button onclick="window.close">Close</button></div>
+</body>
+</html>

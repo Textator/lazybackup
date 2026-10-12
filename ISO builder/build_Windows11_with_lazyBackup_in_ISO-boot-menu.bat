@@ -1320,8 +1320,6 @@ exit /b 0
 
 
 :VERIFY_OUTPUT
-
-:VERIFY_OUTPUT
 if not exist "%OUTPUT_ISO%" (
     echo ERROR: Output ISO was not created.
     exit /b 1
